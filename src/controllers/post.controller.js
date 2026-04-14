@@ -1,0 +1,276 @@
+const ApiError = require("../utils/ApiError");
+const { successResponse } = require("../utils/ApiResponse");
+const { paginate } = require("../utils/pagination");
+const { ROLES } = require("../constant/role");
+
+const { Post, Comment, User } = require("../models");
+const { getUser, getPost } = require("../utils/dbHelper");
+const { setCache } = require("../utils/cache");
+const { PostLike } = require("../models");
+
+// CREATE POST
+exports.createPost = async (req, res, next) => {
+  try {
+    const { content } = req.body;
+    const { user, file } = req;
+
+    const post = await Post.create({
+      content,
+      image: file ? file.filename : null,
+      userId: user.id,
+      likeCount: 0,
+      isDeleted: false,
+    });
+
+    req.activity = {
+      entity: "Post",
+      entityId: post.id,
+    };
+
+    return successResponse(res, {
+      statusCode: 201,
+      message: "Post created successfully",
+      data: post,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET ALL POSTS
+exports.getAllPosts = async (req, res, next) => {
+  try {
+    const {
+      query: { page = 1, limit = 10, userId },
+      user,
+    } = req;
+
+    const where = { isDeleted: false };
+
+    if (userId) {
+      const targetUser = userId == user.id ? user : await getUser(userId);
+      where.userId = targetUser.id;
+    }
+
+    const { data, pagination } = await paginate({
+      model: Post,
+      where,
+      page,
+      limit,
+      include: [{ model: User, attributes: ["id", "name"] }],
+    });
+
+    if (req.cacheKey)
+      await setCache(req.cacheKey, {
+        data,
+        meta: pagination,
+        message: "Posts fetched successfully",
+      });
+
+    return successResponse(res, {
+      message: "Posts fetched successfully",
+      data,
+      meta: pagination,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET SINGLE POST
+exports.getPost = async (req, res, next) => {
+  try {
+    const { postId } = req.params;
+
+    const post = await Post.findOne({
+      where: { id: postId, isDeleted: false },
+      include: [{ model: User, attributes: ["id", "name"] }],
+    });
+
+    if (!post) throw new ApiError(404, "Post not found");
+
+    if (req.cacheKey)
+      await setCache(req.cacheKey, {
+        data: post,
+        message: "Post fetched successfully",
+      });
+
+    return successResponse(res, {
+      message: "Post fetched successfully",
+      data: post,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// UPDATE POST
+exports.updatePost = async (req, res, next) => {
+  try {
+    const { postId } = req.params;
+    const { content } = req.body;
+    const { user } = req;
+
+    const post = await getPost(postId);
+
+    if (post.userId !== user.id) throw new ApiError(403, "Not authorized");
+
+    const oldData = post.toJSON();
+
+    if (content) post.content = content;
+
+    await post.save();
+
+    const newData = post.toJSON();
+
+    req.activity = {
+      entity: "Post",
+      entityId: post.id,
+      oldData,
+      newData,
+    };
+
+    return successResponse(res, {
+      message: "Post updated successfully",
+      data: post,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// DELETE POST
+exports.deletePost = async (req, res, next) => {
+  try {
+    const { postId } = req.params;
+    const { user } = req;
+
+    const post = await getPost(postId);
+
+    if (user.role !== ROLES.ADMIN && post.userId !== user.id)
+      throw new ApiError(403, "Not authorized");
+
+    await post.update({
+      isDeleted: true,
+      deletedBy: user.id,
+    });
+
+    await Comment.update(
+      {
+        isDeleted: true,
+        deletedBy: user.id,
+      },
+      {
+        where: { postId, isDeleted: false },
+      },
+    );
+
+    req.activity = {
+      entity: "Post",
+      entityId: post.id,
+    };
+
+    return successResponse(res, {
+      message: "Post deleted successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// LIKE POST (NEW DESIGN)
+exports.likePost = async (req, res, next) => {
+  try {
+    const { postId } = req.params;
+    const userId = req.user.id;
+
+    const post = await getPost(postId);
+
+    const [like, created] = await PostLike.findOrCreate({
+      where: { userId, postId },
+    });
+
+    if (!created) await like.destroy();
+
+    const likeCount = await PostLike.count({ where: { postId } });
+
+    req.activity = {
+      entity: "PostLike",
+      entityId: postId,
+    };
+
+    return successResponse(res, {
+      message: created ? "Post liked" : "Post unliked",
+      data: { likeCount },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// COMMENTS OF POST
+exports.getAllCommentsOfPost = async (req, res, next) => {
+  try {
+    const { postId } = req.params;
+    const { page = 1, limit = 10 } = req.query;
+
+    await getPost(postId);
+
+    const { data, pagination } = await paginate({
+      model: Comment,
+      where: { postId, isDeleted: false },
+      page,
+      limit,
+      include: [{ model: User, attributes: ["id", "name"] }],
+    });
+
+    if (req.cacheKey) {
+      await setCache(req.cacheKey, {
+        data,
+        meta: pagination,
+        message: "Comments fetched successfully",
+      });
+    }
+
+    return successResponse(res, {
+      message: "Comments fetched successfully",
+      data,
+      meta: pagination,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// SINGLE COMMENT OF POST
+exports.getCommentOfPost = async (req, res, next) => {
+  try {
+    const { postId, commentId } = req.params;
+
+    await getPost(postId);
+
+    const comment = await Comment.findOne({
+      where: { id: commentId, postId, isDeleted: false },
+      include: [
+        { model: User, attributes: ["id", "name"] },
+        { model: Post, attributes: ["id", "content"] },
+      ],
+    });
+
+    if (!comment) throw new ApiError(404, "Comment not found");
+
+    if (req.cacheKey) {
+      await setCache(req.cacheKey, {
+        data: comment,
+        message: "Comment fetched successfully",
+      });
+    }
+
+    return successResponse(res, {
+      message: "Comment fetched successfully",
+      data: comment,
+    });
+  } catch (error) {
+    next(error);
+  }
+};

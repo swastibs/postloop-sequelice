@@ -1,0 +1,322 @@
+const ApiError = require("../utils/ApiError");
+const { ROLES } = require("../constant/role");
+const { sanitizedUser } = require("../utils/sanitizedUser");
+const { successResponse } = require("../utils/ApiResponse");
+const { paginate } = require("../utils/pagination");
+
+const { User, Post, Comment } = require("../models");
+const { getUser } = require("../utils/dbHelper");
+const { setCache } = require("../utils/cache");
+
+// GET ALL USERS
+exports.getAllUsers = async (req, res, next) => {
+  try {
+    const {
+      user,
+      query: { page = 1, limit = 10, email, name },
+    } = req;
+    const isAdmin = user.role === ROLES.ADMIN;
+
+    const where = {
+      isDeleted: false,
+      ...(isAdmin ? {} : { isActive: true, role: ROLES.USER }),
+    };
+
+    if (email) where.email = email.toLowerCase();
+    if (name) where.name = name;
+
+    const { data, pagination } = await paginate({
+      model: User,
+      where,
+      page,
+      limit,
+    });
+
+    const result = data.map(sanitizedUser);
+
+    if (req.cacheKey) {
+      await setCache(req.cacheKey, {
+        data: result,
+        meta: pagination,
+        message: "Users fetched successfully",
+      });
+    }
+
+    return successResponse(res, {
+      message: "Users fetched successfully",
+      data: result,
+      meta: pagination,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET SINGLE USER
+exports.getUser = async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const { user } = req;
+
+    const targetUser = await getUser(userId);
+
+    if (req.user.role === ROLES.USER && targetUser.role === ROLES.ADMIN)
+      throw new ApiError(404, "User not found");
+
+    const result = sanitizedUser(targetUser);
+
+    if (req.cacheKey)
+      await setCache(req.cacheKey, {
+        data: result,
+        message: "User fetched successfully",
+      });
+
+    return successResponse(res, {
+      message: "User fetched successfully",
+      data: result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// DELETE USER
+exports.deleteUser = async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const adminId = req.user.id;
+
+    const targetUser = await getUser(userId);
+
+    if (targetUser.role === ROLES.ADMIN)
+      throw new ApiError(403, "Cannot delete an admin");
+
+    await targetUser.update({
+      isDeleted: true,
+      isActive: false,
+      deletedBy: adminId,
+    });
+
+    const posts = await Post.findAll({
+      where: { userId, isDeleted: false },
+      attributes: ["id"],
+      raw: true,
+    });
+
+    const postIds = posts.map((p) => p.id);
+
+    await Post.update(
+      { isDeleted: true, deletedBy: adminId },
+      { where: { userId, isDeleted: false } },
+    );
+
+    await Comment.update(
+      { isDeleted: true, deletedBy: adminId },
+      {
+        where: {
+          isDeleted: false,
+          [require("sequelize").Op.or]: [{ userId }, { postId: postIds }],
+        },
+      },
+    );
+
+    req.activity = { entity: "User", entityId: targetUser.id };
+
+    return successResponse(res, {
+      message: "User deleted successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// UPDATE USER ACTION
+exports.updateUserAction = async (req, res, next) => {
+  try {
+    const { userId, action } = req.params;
+
+    const targetUser = await getUser(userId);
+
+    const oldData = sanitizedUser(targetUser);
+
+    let message = "";
+
+    switch (action) {
+      case "active":
+        targetUser.isActive = true;
+        message = "User activated successfully";
+        break;
+
+      case "inactive":
+        targetUser.isActive = false;
+        message = "User deactivated successfully";
+        break;
+
+      case "promote":
+        targetUser.role = "admin";
+        message = "User promoted successfully";
+        break;
+
+      default:
+        throw new ApiError(400, "Invalid action");
+    }
+
+    await targetUser.save();
+
+    const newData = sanitizedUser(targetUser);
+
+    req.activity = {
+      entity: "User",
+      entityId: targetUser.id,
+      oldData,
+      newData,
+    };
+
+    return successResponse(res, { message });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// USER POSTS
+exports.getAllPostsOfUser = async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const { page = 1, limit = 10 } = req.query;
+
+    const targetUser = await getUser(userId);
+    if (!targetUser.isActive) throw new ApiError(403, "User inactive");
+
+    const { data, pagination } = await paginate({
+      model: Post,
+      where: { userId, isDeleted: false },
+      page,
+      limit,
+      include: [
+        {
+          model: User,
+          attributes: ["id", "name"],
+        },
+      ],
+    });
+
+    if (req.cacheKey) {
+      await setCache(req.cacheKey, {
+        data,
+        meta: pagination,
+        message: "Posts fetched successfully",
+      });
+    }
+
+    return successResponse(res, {
+      message: "Posts fetched successfully",
+      data,
+      meta: pagination,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// SINGLE POST
+exports.getPostOfUser = async (req, res, next) => {
+  try {
+    const { userId, postId } = req.params;
+
+    const targetUser = await getUser(userId);
+    if (!targetUser.isActive) throw new ApiError(403, "User inactive");
+
+    const post = await Post.findOne({
+      where: { id: postId, userId, isDeleted: false },
+      include: [{ model: User, attributes: ["id", "name"] }],
+    });
+
+    if (!post) throw new ApiError(404, "Post not found");
+
+    if (req.cacheKey) {
+      await setCache(req.cacheKey, {
+        data: post,
+        message: "Post fetched successfully",
+      });
+    }
+
+    return successResponse(res, {
+      message: "Post fetched successfully",
+      data: post,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// USER COMMENTS
+exports.getAllCommentsOfUser = async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const { page = 1, limit = 10 } = req.query;
+
+    const targetUser = await getUser(userId);
+    if (!targetUser.isActive) throw new ApiError(403, "User inactive");
+
+    const { data, pagination } = await paginate({
+      model: Comment,
+      where: { userId, isDeleted: false },
+      page,
+      limit,
+      include: [
+        { model: User, attributes: ["id", "name"] },
+        { model: Post, attributes: ["id", "content"] },
+      ],
+    });
+
+    if (req.cacheKey) {
+      await setCache(req.cacheKey, {
+        data,
+        meta: pagination,
+        message: "Comments fetched successfully",
+      });
+    }
+
+    return successResponse(res, {
+      message: "Comments fetched successfully",
+      data,
+      meta: pagination,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// SINGLE COMMENT
+exports.getCommentOfUser = async (req, res, next) => {
+  try {
+    const { userId, commentId } = req.params;
+
+    const targetUser = await getUser(userId);
+    if (!targetUser.isActive) throw new ApiError(403, "User inactive");
+
+    const comment = await Comment.findOne({
+      where: { id: commentId, userId, isDeleted: false },
+      include: [
+        { model: User, attributes: ["id", "name"] },
+        { model: Post, attributes: ["id", "content"] },
+      ],
+    });
+
+    if (!comment) throw new ApiError(404, "Comment not found");
+
+    if (req.cacheKey) {
+      await setCache(req.cacheKey, {
+        data: comment,
+        message: "Comment fetched successfully",
+      });
+    }
+
+    return successResponse(res, {
+      message: "Comment fetched successfully",
+      data: comment,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
