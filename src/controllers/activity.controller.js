@@ -30,24 +30,33 @@ exports.getActivities = async (req, res, next) => {
       if (endDate) query.requestTime.$lte = new Date(endDate);
     }
 
-    const skip = (page - 1) * limit;
+    const pageNum = Math.max(parseInt(page) || 1, 1);
+    const limitNum = Math.min(parseInt(limit) || 10, 50);
 
-    const [data, total] = await Promise.all([
-      Activity.find(query)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(Number(limit)),
-      Activity.countDocuments(query),
-    ]);
+    // 1. Get total records first
+    const totalRecords = await Activity.countDocuments(query);
+
+    const totalPages = Math.max(Math.ceil(totalRecords / limitNum), 1);
+
+    // 2. Clamp page to last valid page
+    const safePage = Math.min(pageNum, totalPages);
+
+    const skip = (safePage - 1) * limitNum;
+
+    // 3. Fetch data using corrected page
+    const data = await Activity.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum);
 
     const result = {
       message: "Logs fetched successfully",
       data,
       meta: {
-        totalRecords: total,
-        currentPage: Number(page),
-        totalPages: Math.ceil(total / limit),
-        limit: Number(limit),
+        totalRecords,
+        currentPage: safePage,
+        totalPages,
+        limit: limitNum,
       },
     };
 
