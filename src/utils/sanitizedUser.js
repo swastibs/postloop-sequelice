@@ -7,5 +7,7 @@ exports.sanitizedUser = (user) => {
     name: safeUser.name,
     email: safeUser.email,
     role: safeUser.role,
+    followersCount: safeUser.followersCount,
+    followingCount: safeUser.followingCount,
   };
 };

@@ -64,3 +64,29 @@ exports.getCommentOfUserSchema = {
   }).unknown(false),
   query: Joi.object({}),
 };
+
+exports.followUserSchema = {
+  params: Joi.object({
+    userId: id,
+  }).unknown(false),
+
+  body: Joi.object({}).max(0),
+
+  query: Joi.object({}).max(0),
+};
+
+exports.getFollowersSchema = {
+  params: Joi.object({
+    userId: id,
+  }).unknown(false),
+
+  query: paginationQuerySchema,
+};
+
+exports.getFollowingSchema = {
+  params: Joi.object({
+    userId: id,
+  }).unknown(false),
+
+  query: paginationQuerySchema,
+};

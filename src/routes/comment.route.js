@@ -34,7 +34,7 @@ commentRouter.post(
 
 commentRouter.get(
   "/",
-  authorize(ROLES.ADMIN, ROLES.USER),
+  authorize(ROLES.ADMIN),
   validate(getAllCommentsSchema),
   cacheMiddleware(),
   getAllComments,

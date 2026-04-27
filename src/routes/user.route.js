@@ -11,6 +11,9 @@ const {
   getPostOfUserSchema,
   getAllCommentsOfUserSchema,
   getCommentOfUserSchema,
+  followUserSchema,
+  getFollowersSchema,
+  getFollowingSchema,
 } = require("../validations/user.validation");
 
 const {
@@ -22,6 +25,9 @@ const {
   getPostOfUser,
   getAllCommentsOfUser,
   getCommentOfUser,
+  followUnfollowUser,
+  getFollowers,
+  getFollowing,
 } = require("../controllers/user.controller");
 const { validate } = require("express-validation");
 const { cacheMiddleware } = require("../middlewares/cache.middleware");
@@ -51,14 +57,6 @@ userRouter.delete(
   validate(userIdParamSchema),
   invalidateCache(["cache:/api/users*", "cache:/api/activities*"]),
   deleteUser,
-);
-
-userRouter.put(
-  "/:userId/:action",
-  authorize(ROLES.ADMIN),
-  validate(updateUserActionSchema),
-  invalidateCache(["cache:/api/users*", "cache:/api/activities*"]),
-  updateUserAction,
 );
 
 userRouter.get(
@@ -91,6 +89,38 @@ userRouter.get(
   validate(getCommentOfUserSchema),
   cacheMiddleware(),
   getCommentOfUser,
+);
+
+userRouter.put(
+  "/:userId/follow",
+  authorize(ROLES.USER),
+  validate(followUserSchema),
+  invalidateCache(["cache:/api/users*", "cache:/api/activities*"]),
+  followUnfollowUser,
+);
+
+userRouter.put(
+  "/:userId/:action",
+  authorize(ROLES.ADMIN),
+  validate(updateUserActionSchema),
+  invalidateCache(["cache:/api/users*", "cache:/api/activities*"]),
+  updateUserAction,
+);
+
+userRouter.get(
+  "/:userId/followers",
+  authorize(ROLES.ADMIN, ROLES.USER),
+  validate(getFollowersSchema),
+  cacheMiddleware(),
+  getFollowers,
+);
+
+userRouter.get(
+  "/:userId/following",
+  authorize(ROLES.ADMIN, ROLES.USER),
+  validate(getFollowingSchema),
+  cacheMiddleware(),
+  getFollowing,
 );
 
 module.exports = userRouter;

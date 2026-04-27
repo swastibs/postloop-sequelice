@@ -1,20 +1,29 @@
 require("dotenv").config();
 const bcrypt = require("bcrypt");
 
-const { sequelize, User, Post, Comment } = require("../models");
+const { sequelize, User, Post, Comment, UserFollow } = require("../models");
 
 const CONFIG = {
   USERS: 10,
   POSTS_PER_USER: 10,
   COMMENTS_PER_POST: 10,
+
+  MIN_FOLLOWING: 2,
+  MAX_FOLLOWING: 5,
+
   BATCH_SIZE: 1000,
 };
 
 const chunk = (start, size, fn) => {
   const arr = [];
-  for (let i = 0; i < size; i++) arr.push(fn(start + i + 1));
+  for (let i = 0; i < size; i++) {
+    arr.push(fn(start + i + 1));
+  }
   return arr;
 };
+
+const randomInt = (min, max) =>
+  Math.floor(Math.random() * (max - min + 1)) + min;
 
 const seed = async () => {
   try {
@@ -23,7 +32,7 @@ const seed = async () => {
 
     const hashedPassword = await bcrypt.hash("9898", 10);
 
-    // USERS
+    /* ---------------- USERS ---------------- */
 
     console.log("Starting USERS insertion...");
 
@@ -39,6 +48,8 @@ const seed = async () => {
           email: `u${index}@gmail.com`,
           password: hashedPassword,
           role: "user",
+          followersCount: 0,
+          followingCount: 0,
         }),
       );
 
@@ -50,12 +61,12 @@ const seed = async () => {
       userIds.push(...inserted.map((u) => u.id));
       userInserted += inserted.length;
 
-      console.log(`👤 Users inserted: ${userInserted}`);
+      console.log(`Users inserted: ${userInserted}`);
     }
 
     console.log(`USERS DONE: ${userInserted}`);
 
-    // POSTS
+    /* ---------------- POSTS ---------------- */
 
     console.log("Starting POSTS insertion...");
 
@@ -75,7 +86,9 @@ const seed = async () => {
           });
 
           postInserted += inserted.length;
+
           console.log(`Posts inserted: ${postInserted}`);
+
           posts = [];
         }
       }
@@ -85,14 +98,15 @@ const seed = async () => {
       const inserted = await Post.bulkCreate(posts, {
         ignoreDuplicates: true,
       });
+
       postInserted += inserted.length;
     }
 
     console.log(`POSTS DONE: ${postInserted}`);
 
-    // COMMENTS
+    /* ---------------- COMMENTS ---------------- */
 
-    console.log("🚀 Starting COMMENTS insertion...");
+    console.log("Starting COMMENTS insertion...");
 
     const allPosts = await Post.findAll({
       attributes: ["id"],
@@ -118,7 +132,9 @@ const seed = async () => {
           });
 
           commentInserted += inserted.length;
+
           console.log(`Comments inserted: ${commentInserted}`);
+
           comments = [];
         }
       }
@@ -134,16 +150,93 @@ const seed = async () => {
 
     console.log(`COMMENTS DONE: ${commentInserted}`);
 
+    /* ---------------- FOLLOWS ---------------- */
+
+    console.log("Starting FOLLOW relationships...");
+
+    const followMap = new Set();
+    const follows = [];
+
+    for (const followerId of userIds) {
+      const followCount = randomInt(
+        CONFIG.MIN_FOLLOWING,
+        Math.min(CONFIG.MAX_FOLLOWING, userIds.length - 1),
+      );
+
+      while (
+        [...followMap].filter((x) => x.startsWith(`${followerId}-`)).length <
+        followCount
+      ) {
+        const followingId = userIds[Math.floor(Math.random() * userIds.length)];
+
+        if (followerId === followingId) {
+          continue;
+        }
+
+        const key = `${followerId}-${followingId}`;
+
+        if (followMap.has(key)) {
+          continue;
+        }
+
+        followMap.add(key);
+
+        follows.push({
+          followerId,
+          followingId,
+        });
+      }
+    }
+
+    const insertedFollows = await UserFollow.bulkCreate(follows, {
+      ignoreDuplicates: true,
+    });
+
+    console.log(`FOLLOWS DONE: ${insertedFollows.length}`);
+
+    /* -------- update follower counters -------- */
+
+    console.log("Updating follower/following counters...");
+
+    for (const userId of userIds) {
+      const followersCount = await UserFollow.count({
+        where: {
+          followingId: userId,
+        },
+      });
+
+      const followingCount = await UserFollow.count({
+        where: {
+          followerId: userId,
+        },
+      });
+
+      await User.update(
+        {
+          followersCount,
+          followingCount,
+        },
+        {
+          where: { id: userId },
+        },
+      );
+    }
+
+    console.log("FOLLOW COUNTS UPDATED");
+
     console.log("SEEDING COMPLETED SUCCESSFULLY");
+
     console.log({
       users: userInserted,
       posts: postInserted,
       comments: commentInserted,
+      follows: insertedFollows.length,
     });
 
     process.exit(0);
   } catch (err) {
     console.error("Seeder failed:", err);
+
     process.exit(1);
   }
 };

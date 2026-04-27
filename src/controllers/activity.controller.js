@@ -33,17 +33,14 @@ exports.getActivities = async (req, res, next) => {
     const pageNum = Math.max(parseInt(page) || 1, 1);
     const limitNum = Math.min(parseInt(limit) || 10, 50);
 
-    // 1. Get total records first
     const totalRecords = await Activity.countDocuments(query);
 
     const totalPages = Math.max(Math.ceil(totalRecords / limitNum), 1);
 
-    // 2. Clamp page to last valid page
     const safePage = Math.min(pageNum, totalPages);
 
     const skip = (safePage - 1) * limitNum;
 
-    // 3. Fetch data using corrected page
     const data = await Activity.find(query)
       .sort({ createdAt: -1 })
       .skip(skip)
