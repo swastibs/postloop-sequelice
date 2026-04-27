@@ -3,12 +3,14 @@ const { successResponse } = require("../utils/ApiResponse");
 const { paginate } = require("../utils/pagination");
 const { ROLES } = require("../constant/role");
 
-const { Post, Comment, User } = require("../models");
+const { Post, Comment, User, sequelize } = require("../models");
 const { getPost, getComment } = require("../utils/dbHelper");
 const { setCache } = require("../utils/cache");
 
 // CREATE COMMENT
 exports.createComment = async (req, res, next) => {
+  const transaction = await sequelize.transaction();
+
   try {
     const {
       body: { postId, content },
@@ -17,12 +19,17 @@ exports.createComment = async (req, res, next) => {
 
     await getPost(postId);
 
-    const comment = await Comment.create({
-      postId,
-      userId: user.id,
-      content,
-      isDeleted: false,
-    });
+    const comment = await Comment.create(
+      {
+        postId,
+        userId: user.id,
+        content,
+        isDeleted: false,
+      },
+      { transaction },
+    );
+
+    await transaction.commit();
 
     req.activity = {
       entity: "Comment",
@@ -35,6 +42,7 @@ exports.createComment = async (req, res, next) => {
       data: comment,
     });
   } catch (error) {
+    await transaction.rollback();
     next(error);
   }
 };
@@ -104,6 +112,8 @@ exports.getComment = async (req, res, next) => {
 
 // UPDATE COMMENT
 exports.updateComment = async (req, res, next) => {
+  const transaction = await sequelize.transaction();
+
   try {
     const { commentId } = req.params;
     const { content } = req.body;
@@ -111,16 +121,17 @@ exports.updateComment = async (req, res, next) => {
 
     const targetComment = await getComment(commentId);
 
-    if (targetComment.userId !== user.id) {
+    if (targetComment.userId !== user.id)
       throw new ApiError(403, "Not authorized");
-    }
 
     const oldData = targetComment.toJSON();
 
     if (content && content !== targetComment.content)
       targetComment.content = content;
 
-    await targetComment.save();
+    await targetComment.save({ transaction });
+
+    await transaction.commit();
 
     const newData = targetComment.toJSON();
 
@@ -136,19 +147,24 @@ exports.updateComment = async (req, res, next) => {
       data: targetComment,
     });
   } catch (error) {
+    await transaction.rollback();
     next(error);
   }
 };
 
 // DELETE COMMENT
 exports.deleteComment = async (req, res, next) => {
+  const transaction = await sequelize.transaction();
+
   try {
     const { commentId } = req.params;
     const { user } = req;
 
     const targetComment = await getComment(commentId);
 
-    const post = await Post.findByPk(targetComment.postId);
+    const post = await Post.findByPk(targetComment.postId, {
+      transaction,
+    });
 
     if (!post) throw new ApiError(404, "Post not found");
 
@@ -159,10 +175,12 @@ exports.deleteComment = async (req, res, next) => {
     )
       throw new ApiError(403, "Not authorized");
 
-    await targetComment.update({
-      isDeleted: true,
-      deletedBy: user.id,
-    });
+    await targetComment.update(
+      { isDeleted: true, deletedBy: user.id },
+      { transaction },
+    );
+
+    await transaction.commit();
 
     req.activity = {
       entity: "Comment",
@@ -175,6 +193,7 @@ exports.deleteComment = async (req, res, next) => {
       message: "Comment deleted successfully",
     });
   } catch (error) {
+    await transaction.rollback();
     next(error);
   }
 };

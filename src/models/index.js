@@ -4,6 +4,7 @@ const User = require("./user.model");
 const Post = require("./post.model");
 const Comment = require("./comment.model");
 const PostLike = require("./postLike.model");
+const UserFollow = require("./userFollow.model");
 
 // User → Post
 User.hasMany(Post, { foreignKey: "userId" });
@@ -39,4 +40,19 @@ Post.belongsToMany(User, {
   as: "likedUsers",
 });
 
-module.exports = { sequelize, User, Post, Comment, PostLike };
+// User Follow System
+User.belongsToMany(User, {
+  through: UserFollow,
+  as: "followers",
+  foreignKey: "followingId",
+  otherKey: "followerId",
+});
+
+User.belongsToMany(User, {
+  through: UserFollow,
+  as: "following",
+  foreignKey: "followerId",
+  otherKey: "followingId",
+});
+
+module.exports = { sequelize, User, Post, Comment, PostLike, UserFollow };

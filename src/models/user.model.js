@@ -18,6 +18,8 @@ const User = sequelize.define(
       type: DataTypes.ENUM(ROLES.USER, ROLES.ADMIN),
       defaultValue: ROLES.USER,
     },
+    followersCount: { type: DataTypes.INTEGER, defaultValue: 0 },
+    followingCount: { type: DataTypes.INTEGER, defaultValue: 0 },
     isActive: { type: DataTypes.BOOLEAN, defaultValue: true },
     isDeleted: { type: DataTypes.BOOLEAN, defaultValue: false },
     deletedBy: { type: DataTypes.INTEGER, allowNull: true },
@@ -30,6 +32,8 @@ const User = sequelize.define(
       { fields: ["name"] },
       { fields: ["isDeleted", "isActive"] },
       { fields: ["createdAt"], order: [["createdAt", "DESC"]] },
+      { fields: ["followersCount"] },
+      { fields: ["followingCount"] },
     ],
   },
 );

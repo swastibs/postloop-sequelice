@@ -3,7 +3,7 @@ const { successResponse } = require("../utils/ApiResponse");
 const { paginate } = require("../utils/pagination");
 const { ROLES } = require("../constant/role");
 
-const { Post, Comment, User } = require("../models");
+const { Post, Comment, User, sequelize } = require("../models");
 const { getUser, getPost } = require("../utils/dbHelper");
 const { setCache } = require("../utils/cache");
 const { PostLike } = require("../models");
@@ -141,69 +141,97 @@ exports.updatePost = async (req, res, next) => {
 
 // DELETE POST
 exports.deletePost = async (req, res, next) => {
+  const transaction = await sequelize.transaction();
+
   try {
     const { postId } = req.params;
     const { user } = req;
 
-    const post = await getPost(postId);
-
-    if (user.role !== ROLES.ADMIN && post.userId !== user.id)
-      throw new ApiError(403, "Not authorized");
-
-    await post.update({
-      isDeleted: true,
-      deletedBy: user.id,
+    const post = await Post.findOne({
+      where: { id: postId, isDeleted: false },
+      transaction,
+      lock: transaction.LOCK.UPDATE,
     });
+
+    if (!post) {
+      await transaction.rollback();
+      throw new ApiError(404, "Post not found");
+    }
+
+    if (user.role !== ROLES.ADMIN && post.userId !== user.id) {
+      await transaction.rollback();
+      throw new ApiError(403, "Not authorized");
+    }
+
+    await post.update({ isDeleted: true, deletedBy: user.id }, { transaction });
 
     await Comment.update(
-      {
-        isDeleted: true,
-        deletedBy: user.id,
-      },
-      {
-        where: { postId, isDeleted: false },
-      },
+      { isDeleted: true, deletedBy: user.id },
+      { where: { postId, isDeleted: false }, transaction },
     );
 
-    req.activity = {
-      entity: "Post",
-      entityId: post.id,
-    };
+    await transaction.commit();
 
-    return successResponse(res, {
-      message: "Post deleted successfully",
-    });
+    req.activity = { entity: "Post", entityId: post.id };
+
+    return successResponse(res, { message: "Post deleted successfully" });
   } catch (error) {
+    await transaction.rollback();
     next(error);
   }
 };
 
 // LIKE POST (NEW DESIGN)
 exports.likePost = async (req, res, next) => {
+  const transaction = await sequelize.transaction();
+
   try {
     const { postId } = req.params;
     const userId = req.user.id;
 
-    const post = await getPost(postId);
+    const post = await Post.findOne({
+      where: { id: postId, isDeleted: false },
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+
+    if (!post) {
+      await transaction.rollback();
+      throw new ApiError(404, "Post not found");
+    }
 
     const [like, created] = await PostLike.findOrCreate({
       where: { userId, postId },
+      defaults: { userId, postId },
+      transaction,
     });
 
-    if (!created) await like.destroy();
+    // UNLIKE
+    if (!created) {
+      await like.destroy({ transaction });
+
+      await transaction.commit();
+
+      const likeCount = await PostLike.count({ where: { postId } });
+
+      req.activity = { entity: "PostLike", entityId: postId };
+
+      return successResponse(res, {
+        message: "Post unliked",
+        data: { likeCount },
+      });
+    }
+
+    // LIKE
+    await transaction.commit();
 
     const likeCount = await PostLike.count({ where: { postId } });
 
-    req.activity = {
-      entity: "PostLike",
-      entityId: postId,
-    };
+    req.activity = { entity: "PostLike", entityId: postId };
 
-    return successResponse(res, {
-      message: created ? "Post liked" : "Post unliked",
-      data: { likeCount },
-    });
+    return successResponse(res, { message: "Post liked", data: { likeCount } });
   } catch (error) {
+    await transaction.rollback();
     next(error);
   }
 };

@@ -4,9 +4,10 @@ const { sanitizedUser } = require("../utils/sanitizedUser");
 const { successResponse } = require("../utils/ApiResponse");
 const { paginate } = require("../utils/pagination");
 
-const { User, Post, Comment } = require("../models");
+const { User, Post, Comment, UserFollow, sequelize } = require("../models");
 const { getUser } = require("../utils/dbHelper");
 const { setCache } = require("../utils/cache");
+const { Op } = require("sequelize");
 
 // GET ALL USERS
 exports.getAllUsers = async (req, res, next) => {
@@ -34,13 +35,12 @@ exports.getAllUsers = async (req, res, next) => {
 
     const result = data.map(sanitizedUser);
 
-    if (req.cacheKey) {
+    if (req.cacheKey)
       await setCache(req.cacheKey, {
         data: result,
         meta: pagination,
         message: "Users fetched successfully",
       });
-    }
 
     return successResponse(res, {
       message: "Users fetched successfully",
@@ -82,32 +82,48 @@ exports.getUser = async (req, res, next) => {
 
 // DELETE USER
 exports.deleteUser = async (req, res, next) => {
+  const transaction = await sequelize.transaction();
+
   try {
     const { userId } = req.params;
     const adminId = req.user.id;
 
-    const targetUser = await getUser(userId);
-
-    if (targetUser.role === ROLES.ADMIN)
-      throw new ApiError(403, "Cannot delete an admin");
-
-    await targetUser.update({
-      isDeleted: true,
-      isActive: false,
-      deletedBy: adminId,
+    const targetUser = await User.findOne({
+      where: { id: userId, isDeleted: false },
+      transaction,
+      lock: transaction.LOCK.UPDATE,
     });
+
+    if (!targetUser) {
+      await transaction.rollback();
+      throw new ApiError(404, "User not found");
+    }
+
+    if (targetUser.role === ROLES.ADMIN) {
+      await transaction.rollback();
+      throw new ApiError(403, "Cannot delete an admin");
+    }
+
+    await targetUser.update(
+      { isDeleted: true, isActive: false, deletedBy: adminId },
+      { transaction },
+    );
 
     const posts = await Post.findAll({
       where: { userId, isDeleted: false },
       attributes: ["id"],
       raw: true,
+      transaction,
     });
 
     const postIds = posts.map((p) => p.id);
 
     await Post.update(
       { isDeleted: true, deletedBy: adminId },
-      { where: { userId, isDeleted: false } },
+      {
+        where: { userId, isDeleted: false },
+        transaction,
+      },
     );
 
     await Comment.update(
@@ -115,17 +131,27 @@ exports.deleteUser = async (req, res, next) => {
       {
         where: {
           isDeleted: false,
-          [require("sequelize").Op.or]: [{ userId }, { postId: postIds }],
+          [Op.or]: [
+            { userId },
+            ...(postIds.length ? [{ postId: postIds }] : []),
+          ],
         },
+        transaction,
       },
     );
 
-    req.activity = { entity: "User", entityId: targetUser.id };
+    await transaction.commit();
+
+    req.activity = {
+      entity: "User",
+      entityId: targetUser.id,
+    };
 
     return successResponse(res, {
       message: "User deleted successfully",
     });
   } catch (error) {
+    await transaction.rollback();
     next(error);
   }
 };
@@ -315,6 +341,172 @@ exports.getCommentOfUser = async (req, res, next) => {
     return successResponse(res, {
       message: "Comment fetched successfully",
       data: comment,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Follow/Unfollow USER
+exports.followUnfollowUser = async (req, res, next) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const followerId = req.user.id;
+    const { userId: followingId } = req.params;
+
+    if (Number(followerId) === Number(followingId)) {
+      await transaction.rollback();
+      throw new ApiError(400, "You cannot follow yourself");
+    }
+
+    const targetUser = await User.findOne({
+      where: { id: followingId, isDeleted: false },
+      transaction,
+      lock: transaction.LOCK.UPDATE,
+    });
+
+    if (!targetUser) {
+      await transaction.rollback();
+      throw new ApiError(404, "User not found");
+    }
+
+    if (!targetUser.isActive) {
+      await transaction.rollback();
+      throw new ApiError(403, "User inactive");
+    }
+
+    const [relation, created] = await UserFollow.findOrCreate({
+      where: { followerId, followingId },
+      defaults: { followerId, followingId },
+      transaction,
+    });
+
+    // UNFOLLOW
+    if (!created) {
+      await relation.destroy({ transaction });
+
+      await User.increment(
+        { followingCount: -1 },
+        { where: { id: followerId }, transaction },
+      );
+
+      await User.increment(
+        { followersCount: -1 },
+        { where: { id: followingId }, transaction },
+      );
+
+      await transaction.commit();
+
+      req.activity = { entity: "Follow", entityId: followingId };
+
+      return successResponse(res, { message: "User unfollowed successfully" });
+    }
+
+    // FOLLOW
+    await User.increment(
+      { followingCount: 1 },
+      { where: { id: followerId }, transaction },
+    );
+
+    await User.increment(
+      { followersCount: 1 },
+      { where: { id: followingId }, transaction },
+    );
+
+    await transaction.commit();
+
+    req.activity = { entity: "Follow", entityId: followingId };
+
+    return successResponse(res, { message: "User followed successfully" });
+  } catch (error) {
+    await transaction.rollback();
+    next(error);
+  }
+};
+
+// GET FOLLOWERS OF USER
+exports.getFollowers = async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const { page = 1, limit = 10 } = req.query;
+
+    await getUser(userId);
+
+    const { data, pagination } = await paginate({
+      model: User,
+      page,
+      limit,
+      include: [
+        {
+          model: User,
+          as: "following",
+          where: { id: userId },
+          through: {
+            attributes: [],
+          },
+          attributes: [],
+        },
+      ],
+    });
+
+    const result = data.map(sanitizedUser);
+
+    if (req.cacheKey) {
+      await setCache(req.cacheKey, {
+        data: result,
+        meta: pagination,
+        message: "Followers fetched successfully",
+      });
+    }
+
+    return successResponse(res, {
+      message: "Followers fetched successfully",
+      data: result,
+      meta: pagination,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// GET FOLLOWING OF USER
+exports.getFollowing = async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const { page = 1, limit = 10 } = req.query;
+
+    await getUser(userId);
+
+    const { data, pagination } = await paginate({
+      model: User,
+      page,
+      limit,
+      include: [
+        {
+          model: User,
+          as: "followers",
+          where: { id: userId },
+          through: { attributes: [] },
+          attributes: [],
+        },
+      ],
+    });
+
+    const result = data.map(sanitizedUser);
+
+    if (req.cacheKey) {
+      await setCache(req.cacheKey, {
+        data: result,
+        meta: pagination,
+        message: "Following fetched successfully",
+      });
+    }
+
+    return successResponse(res, {
+      message: "Following fetched successfully",
+      data: result,
+      meta: pagination,
     });
   } catch (error) {
     next(error);

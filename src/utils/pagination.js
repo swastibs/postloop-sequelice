@@ -6,26 +6,29 @@ exports.paginate = async ({
   include = [],
   order = [["createdAt", "DESC"]],
 }) => {
-  page = parseInt(page) || 1;
-  limit = Math.min(parseInt(limit) || 10, 50);
+  page = parseInt(page, 10) || 1;
+  limit = Math.min(parseInt(limit, 10) || 10, 50);
 
-  // First get total count
-  const { count: totalRecords } = await model.findAndCountAll({
+  const { count } = await model.findAndCountAll({
     where,
+    include,
+    distinct: true,
   });
 
+  const totalRecords = count;
   const totalPages = Math.max(Math.ceil(totalRecords / limit), 1);
 
-  // Clamp page BEFORE querying data
   const safePage = Math.min(Math.max(page, 1), totalPages);
 
   const offset = (safePage - 1) * limit;
 
   const { rows } = await model.findAndCountAll({
     where,
+    include,
+    distinct: true,
+    subQuery: false,
     limit,
     offset,
-    include,
     order,
   });
 
