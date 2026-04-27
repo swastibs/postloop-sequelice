@@ -3,24 +3,33 @@ const { successResponse } = require("../utils/ApiResponse");
 const { paginate } = require("../utils/pagination");
 const { ROLES } = require("../constant/role");
 
-const { Post, Comment, User, sequelize } = require("../models");
-const { getUser, getPost } = require("../utils/dbHelper");
+const { Post, Comment, User, sequelize, PostLike } = require("../models");
+const { getUser, getPost, getSafeUserInclude } = require("../utils/dbHelper");
 const { setCache } = require("../utils/cache");
-const { PostLike } = require("../models");
 
 // CREATE POST
 exports.createPost = async (req, res, next) => {
+  const transaction = await sequelize.transaction();
+
   try {
     const { content } = req.body;
     const { user, file } = req;
 
-    const post = await Post.create({
-      content,
-      image: file ? file.filename : null,
-      userId: user.id,
-      likeCount: 0,
-      isDeleted: false,
-    });
+    const post = await Post.create(
+      {
+        content,
+        image: file ? file.filename : null,
+        userId: user.id,
+        likeCount: 0,
+        isDeleted: false,
+      },
+      { transaction },
+    );
+
+    // safer instance-based increment
+    await user.increment("postsCount", { transaction });
+
+    await transaction.commit();
 
     req.activity = {
       entity: "Post",
@@ -33,6 +42,7 @@ exports.createPost = async (req, res, next) => {
       data: post,
     });
   } catch (error) {
+    await transaction.rollback();
     next(error);
   }
 };
@@ -57,15 +67,16 @@ exports.getAllPosts = async (req, res, next) => {
       where,
       page,
       limit,
-      include: [{ model: User, attributes: ["id", "name"] }],
+      include: [getSafeUserInclude()],
     });
 
-    if (req.cacheKey)
+    if (req.cacheKey) {
       await setCache(req.cacheKey, {
         data,
         meta: pagination,
         message: "Posts fetched successfully",
       });
+    }
 
     return successResponse(res, {
       message: "Posts fetched successfully",
@@ -84,16 +95,17 @@ exports.getPost = async (req, res, next) => {
 
     const post = await Post.findOne({
       where: { id: postId, isDeleted: false },
-      include: [{ model: User, attributes: ["id", "name"] }],
+      include: [getSafeUserInclude()],
     });
 
     if (!post) throw new ApiError(404, "Post not found");
 
-    if (req.cacheKey)
+    if (req.cacheKey) {
       await setCache(req.cacheKey, {
         data: post,
         message: "Post fetched successfully",
       });
+    }
 
     return successResponse(res, {
       message: "Post fetched successfully",
@@ -154,12 +166,10 @@ exports.deletePost = async (req, res, next) => {
     });
 
     if (!post) {
-      await transaction.rollback();
       throw new ApiError(404, "Post not found");
     }
 
     if (user.role !== ROLES.ADMIN && post.userId !== user.id) {
-      await transaction.rollback();
       throw new ApiError(403, "Not authorized");
     }
 
@@ -170,18 +180,29 @@ exports.deletePost = async (req, res, next) => {
       { where: { postId, isDeleted: false }, transaction },
     );
 
+    // safer instance decrement
+    const owner = await User.findByPk(post.userId, { transaction });
+    if (owner) {
+      await owner.decrement("postsCount", { transaction });
+    }
+
     await transaction.commit();
 
-    req.activity = { entity: "Post", entityId: post.id };
+    req.activity = {
+      entity: "Post",
+      entityId: post.id,
+    };
 
-    return successResponse(res, { message: "Post deleted successfully" });
+    return successResponse(res, {
+      message: "Post deleted successfully",
+    });
   } catch (error) {
     await transaction.rollback();
     next(error);
   }
 };
 
-// LIKE POST (NEW DESIGN)
+// LIKE / UNLIKE POST (OPTIMIZED)
 exports.likePost = async (req, res, next) => {
   const transaction = await sequelize.transaction();
 
@@ -196,7 +217,6 @@ exports.likePost = async (req, res, next) => {
     });
 
     if (!post) {
-      await transaction.rollback();
       throw new ApiError(404, "Post not found");
     }
 
@@ -210,26 +230,29 @@ exports.likePost = async (req, res, next) => {
     if (!created) {
       await like.destroy({ transaction });
 
-      await transaction.commit();
+      await post.decrement("likeCount", { transaction });
 
-      const likeCount = await PostLike.count({ where: { postId } });
+      await transaction.commit();
 
       req.activity = { entity: "PostLike", entityId: postId };
 
       return successResponse(res, {
         message: "Post unliked",
-        data: { likeCount },
+        data: { likeCount: post.likeCount - 1 },
       });
     }
 
     // LIKE
-    await transaction.commit();
+    await post.increment("likeCount", { transaction });
 
-    const likeCount = await PostLike.count({ where: { postId } });
+    await transaction.commit();
 
     req.activity = { entity: "PostLike", entityId: postId };
 
-    return successResponse(res, { message: "Post liked", data: { likeCount } });
+    return successResponse(res, {
+      message: "Post liked",
+      data: { likeCount: post.likeCount + 1 },
+    });
   } catch (error) {
     await transaction.rollback();
     next(error);
@@ -249,7 +272,7 @@ exports.getAllCommentsOfPost = async (req, res, next) => {
       where: { postId, isDeleted: false },
       page,
       limit,
-      include: [{ model: User, attributes: ["id", "name"] }],
+      include: [getSafeUserInclude()],
     });
 
     if (req.cacheKey) {
@@ -280,7 +303,7 @@ exports.getCommentOfPost = async (req, res, next) => {
     const comment = await Comment.findOne({
       where: { id: commentId, postId, isDeleted: false },
       include: [
-        { model: User, attributes: ["id", "name"] },
+        getSafeUserInclude(),
         { model: Post, attributes: ["id", "content"] },
       ],
     });

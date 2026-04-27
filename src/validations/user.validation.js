@@ -90,3 +90,15 @@ exports.getFollowingSchema = {
 
   query: paginationQuerySchema,
 };
+
+exports.updateProfileSchema = {
+  body: Joi.object({
+    bio: Joi.string().trim().max(150).allow(null, "").messages({
+      "string.base": "Bio must be a string",
+      "string.max": "Bio cannot exceed 500 characters",
+    }),
+  }).unknown(false),
+
+  params: Joi.object({}).unknown(false),
+  query: Joi.object({}).unknown(false),
+};

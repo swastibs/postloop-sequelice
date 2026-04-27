@@ -4,7 +4,11 @@ const { paginate } = require("../utils/pagination");
 const { ROLES } = require("../constant/role");
 
 const { Post, Comment, User, sequelize } = require("../models");
-const { getPost, getComment } = require("../utils/dbHelper");
+const {
+  getPost,
+  getComment,
+  getSafeUserInclude,
+} = require("../utils/dbHelper");
 const { setCache } = require("../utils/cache");
 
 // CREATE COMMENT
@@ -58,7 +62,7 @@ exports.getAllComments = async (req, res, next) => {
       page,
       limit,
       include: [
-        { model: User, attributes: ["id", "name"] },
+        getSafeUserInclude(),
         { model: Post, attributes: ["id", "content"] },
       ],
     });
@@ -88,7 +92,7 @@ exports.getComment = async (req, res, next) => {
     const comment = await Comment.findOne({
       where: { id: commentId, isDeleted: false },
       include: [
-        { model: User, attributes: ["id", "name"] },
+        getSafeUserInclude(),
         { model: Post, attributes: ["id", "content"] },
       ],
     });

@@ -8,11 +8,7 @@ exports.signUpSchema = {
     name: Joi.string().trim().min(2).max(16).required(),
     email: email.required(),
     password: password.required(),
-    confirmPassword: Joi.string()
-      .valid(Joi.ref("password"))
-      .required()
-      .strip()
-      .messages({ "any.only": "Passwords do not match" }),
+    bio: Joi.string().trim().max(500).allow(null, ""),
   }).unknown(false),
 
   params: Joi.object().max(0),

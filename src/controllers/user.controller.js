@@ -5,7 +5,7 @@ const { successResponse } = require("../utils/ApiResponse");
 const { paginate } = require("../utils/pagination");
 
 const { User, Post, Comment, UserFollow, sequelize } = require("../models");
-const { getUser } = require("../utils/dbHelper");
+const { getUser, getSafeUserInclude } = require("../utils/dbHelper");
 const { setCache } = require("../utils/cache");
 const { Op } = require("sequelize");
 
@@ -13,14 +13,14 @@ const { Op } = require("sequelize");
 exports.getAllUsers = async (req, res, next) => {
   try {
     const {
-      user,
       query: { page = 1, limit = 10, email, name },
     } = req;
-    const isAdmin = user.role === ROLES.ADMIN;
 
+    // ALWAYS exclude admin users from public responses
     const where = {
       isDeleted: false,
-      ...(isAdmin ? {} : { isActive: true, role: ROLES.USER }),
+      role: ROLES.USER, // Never return admin users
+      isActive: true,
     };
 
     if (email) where.email = email.toLowerCase();
@@ -94,15 +94,10 @@ exports.deleteUser = async (req, res, next) => {
       lock: transaction.LOCK.UPDATE,
     });
 
-    if (!targetUser) {
-      await transaction.rollback();
-      throw new ApiError(404, "User not found");
-    }
+    if (!targetUser) throw new ApiError(404, "User not found");
 
-    if (targetUser.role === ROLES.ADMIN) {
-      await transaction.rollback();
+    if (targetUser.role === ROLES.ADMIN)
       throw new ApiError(403, "Cannot delete an admin");
-    }
 
     await targetUser.update(
       { isDeleted: true, isActive: false, deletedBy: adminId },
@@ -120,10 +115,7 @@ exports.deleteUser = async (req, res, next) => {
 
     await Post.update(
       { isDeleted: true, deletedBy: adminId },
-      {
-        where: { userId, isDeleted: false },
-        transaction,
-      },
+      { where: { userId, isDeleted: false }, transaction },
     );
 
     await Comment.update(
@@ -162,6 +154,9 @@ exports.updateUserAction = async (req, res, next) => {
     const { userId, action } = req.params;
 
     const targetUser = await getUser(userId);
+
+    if (targetUser.role === ROLES.ADMIN)
+      throw new ApiError(403, "You are not allowed to modify an admin user");
 
     const oldData = sanitizedUser(targetUser);
 
@@ -218,12 +213,7 @@ exports.getAllPostsOfUser = async (req, res, next) => {
       where: { userId, isDeleted: false },
       page,
       limit,
-      include: [
-        {
-          model: User,
-          attributes: ["id", "name"],
-        },
-      ],
+      include: [getSafeUserInclude()],
     });
 
     if (req.cacheKey) {
@@ -254,7 +244,7 @@ exports.getPostOfUser = async (req, res, next) => {
 
     const post = await Post.findOne({
       where: { id: postId, userId, isDeleted: false },
-      include: [{ model: User, attributes: ["id", "name"] }],
+      include: [getSafeUserInclude()],
     });
 
     if (!post) throw new ApiError(404, "Post not found");
@@ -290,7 +280,7 @@ exports.getAllCommentsOfUser = async (req, res, next) => {
       page,
       limit,
       include: [
-        { model: User, attributes: ["id", "name"] },
+        getSafeUserInclude(),
         { model: Post, attributes: ["id", "content"] },
       ],
     });
@@ -324,7 +314,7 @@ exports.getCommentOfUser = async (req, res, next) => {
     const comment = await Comment.findOne({
       where: { id: commentId, userId, isDeleted: false },
       include: [
-        { model: User, attributes: ["id", "name"] },
+        getSafeUserInclude(),
         { model: Post, attributes: ["id", "content"] },
       ],
     });
@@ -507,6 +497,38 @@ exports.getFollowing = async (req, res, next) => {
       message: "Following fetched successfully",
       data: result,
       meta: pagination,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// UPDATE PROFILE (bio + profilePicture)
+exports.updateProfile = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { bio } = req.body;
+    const file = req.file;
+
+    const user = await User.findByPk(userId);
+
+    if (!user) throw new ApiError(404, "User not found");
+
+    if (bio !== undefined) user.bio = bio;
+
+    if (file) user.profilePicture = file.filename;
+
+    await user.save();
+
+    return successResponse(res, {
+      message: "Profile updated successfully",
+      data: {
+        id: user.id,
+        name: user.name,
+        bio: user.bio,
+        profilePicture: user.profilePicture,
+        postsCount: user.postsCount,
+      },
     });
   } catch (error) {
     next(error);

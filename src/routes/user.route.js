@@ -3,6 +3,7 @@ const userRouter = require("express").Router();
 const { authenticate } = require("../middlewares/auth.middleware");
 const { authorize } = require("../middlewares/authorize.middleware");
 const { ROLES } = require("../constant/role");
+const upload = require("../middlewares/multer");
 const {
   userIdParamSchema,
   getAllUsersSchema,
@@ -14,6 +15,7 @@ const {
   followUserSchema,
   getFollowersSchema,
   getFollowingSchema,
+  updateProfileSchema,
 } = require("../validations/user.validation");
 
 const {
@@ -28,6 +30,7 @@ const {
   followUnfollowUser,
   getFollowers,
   getFollowing,
+  updateProfile,
 } = require("../controllers/user.controller");
 const { validate } = require("express-validation");
 const { cacheMiddleware } = require("../middlewares/cache.middleware");
@@ -105,6 +108,14 @@ userRouter.put(
   validate(updateUserActionSchema),
   invalidateCache(["cache:/api/users*", "cache:/api/activities*"]),
   updateUserAction,
+);
+
+userRouter.put(
+  "/profile",
+  authorize(ROLES.USER),
+  validate(updateProfileSchema),
+  upload.single("profilePicture"),
+  updateProfile,
 );
 
 userRouter.get(

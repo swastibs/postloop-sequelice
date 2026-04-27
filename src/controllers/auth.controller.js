@@ -11,35 +11,39 @@ const { storeToken, deleteToken } = require("../utils/authCache");
 // SIGN UP
 exports.signUp = async (req, res, next) => {
   try {
-    const { name, email, password } = req.body;
+    const { name, email, password, bio } = req.body;
+    const file = req.file;
 
-    const isUserExist = await User.findOne({
-      where: { email, isDeleted: false },
-    });
+    const existingUser = await User.findOne({ where: { email } });
 
-    if (isUserExist) throw new ApiError(409, "Email already exist.");
+    if (existingUser) throw new ApiError(409, "Email already exists");
 
     const hashedPassword = await hash(password, 10);
 
-    const newUser = await User.create({
+    const user = await User.create({
       name,
       email,
       password: hashedPassword,
-      role: ROLES.USER,
-      isActive: true,
-      isDeleted: false,
-      deletedBy: null,
+      bio: bio || null,
+      profilePicture: file ? file.filename : null,
+      postsCount: 0,
+      followersCount: 0,
+      followingCount: 0,
     });
-
-    req.activity = {
-      entity: "User",
-      entityId: newUser.id,
-    };
 
     return successResponse(res, {
       statusCode: 201,
       message: "User created successfully",
-      data: sanitizedUser(newUser),
+      data: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        bio: user.bio,
+        profilePicture: user.profilePicture,
+        postsCount: user.postsCount,
+        followersCount: user.followersCount,
+        followingCount: user.followingCount,
+      },
     });
   } catch (error) {
     next(error);

@@ -25,6 +25,20 @@ const chunk = (start, size, fn) => {
 const randomInt = (min, max) =>
   Math.floor(Math.random() * (max - min + 1)) + min;
 
+const sampleBios = [
+  "Tech enthusiast 🚀",
+  "Coffee lover ☕",
+  "Full-stack developer 💻",
+  "Open-source contributor",
+  "Loves building APIs",
+  "Minimalist coder",
+  "JavaScript addict ⚡",
+  "Learning backend systems",
+];
+
+const getRandomBio = () =>
+  sampleBios[Math.floor(Math.random() * sampleBios.length)];
+
 const seed = async () => {
   try {
     await sequelize.authenticate();
@@ -48,6 +62,10 @@ const seed = async () => {
           email: `u${index}@gmail.com`,
           password: hashedPassword,
           role: "user",
+          bio: getRandomBio(),
+          profilePicture: null,
+
+          postsCount: 0,
           followersCount: 0,
           followingCount: 0,
         }),
@@ -55,7 +73,6 @@ const seed = async () => {
 
       const inserted = await User.bulkCreate(users, {
         returning: true,
-        ignoreDuplicates: true,
       });
 
       userIds.push(...inserted.map((u) => u.id));
@@ -73,7 +90,11 @@ const seed = async () => {
     let posts = [];
     let postInserted = 0;
 
+    const postCountMap = {};
+
     for (let userId of userIds) {
+      postCountMap[userId] = CONFIG.POSTS_PER_USER;
+
       for (let i = 0; i < CONFIG.POSTS_PER_USER; i++) {
         posts.push({
           userId,
@@ -81,28 +102,32 @@ const seed = async () => {
         });
 
         if (posts.length === CONFIG.BATCH_SIZE) {
-          const inserted = await Post.bulkCreate(posts, {
-            ignoreDuplicates: true,
-          });
-
+          const inserted = await Post.bulkCreate(posts);
           postInserted += inserted.length;
-
-          console.log(`Posts inserted: ${postInserted}`);
-
           posts = [];
+          console.log(`Posts inserted: ${postInserted}`);
         }
       }
     }
 
     if (posts.length) {
-      const inserted = await Post.bulkCreate(posts, {
-        ignoreDuplicates: true,
-      });
-
+      const inserted = await Post.bulkCreate(posts);
       postInserted += inserted.length;
     }
 
     console.log(`POSTS DONE: ${postInserted}`);
+
+    /* 🔥 UPDATE POSTS COUNT */
+    console.log("Updating postsCount...");
+
+    for (const userId of Object.keys(postCountMap)) {
+      await User.update(
+        { postsCount: postCountMap[userId] },
+        { where: { id: userId } },
+      );
+    }
+
+    console.log("POST COUNTS UPDATED");
 
     /* ---------------- COMMENTS ---------------- */
 
@@ -127,30 +152,22 @@ const seed = async () => {
         });
 
         if (comments.length === CONFIG.BATCH_SIZE) {
-          const inserted = await Comment.bulkCreate(comments, {
-            ignoreDuplicates: true,
-          });
-
+          const inserted = await Comment.bulkCreate(comments);
           commentInserted += inserted.length;
-
-          console.log(`Comments inserted: ${commentInserted}`);
-
           comments = [];
+          console.log(`Comments inserted: ${commentInserted}`);
         }
       }
     }
 
     if (comments.length) {
-      const inserted = await Comment.bulkCreate(comments, {
-        ignoreDuplicates: true,
-      });
-
+      const inserted = await Comment.bulkCreate(comments);
       commentInserted += inserted.length;
     }
 
     console.log(`COMMENTS DONE: ${commentInserted}`);
 
-    /* ---------------- FOLLOWS ---------------- */
+    /* ---------------- FOLLOW SYSTEM ---------------- */
 
     console.log("Starting FOLLOW relationships...");
 
@@ -169,15 +186,11 @@ const seed = async () => {
       ) {
         const followingId = userIds[Math.floor(Math.random() * userIds.length)];
 
-        if (followerId === followingId) {
-          continue;
-        }
+        if (followerId === followingId) continue;
 
         const key = `${followerId}-${followingId}`;
 
-        if (followMap.has(key)) {
-          continue;
-        }
+        if (followMap.has(key)) continue;
 
         followMap.add(key);
 
@@ -188,27 +201,21 @@ const seed = async () => {
       }
     }
 
-    const insertedFollows = await UserFollow.bulkCreate(follows, {
-      ignoreDuplicates: true,
-    });
+    const insertedFollows = await UserFollow.bulkCreate(follows);
 
     console.log(`FOLLOWS DONE: ${insertedFollows.length}`);
 
-    /* -------- update follower counters -------- */
+    /* 🔥 UPDATE FOLLOW COUNTS */
 
     console.log("Updating follower/following counters...");
 
     for (const userId of userIds) {
       const followersCount = await UserFollow.count({
-        where: {
-          followingId: userId,
-        },
+        where: { followingId: userId },
       });
 
       const followingCount = await UserFollow.count({
-        where: {
-          followerId: userId,
-        },
+        where: { followerId: userId },
       });
 
       await User.update(
@@ -216,9 +223,7 @@ const seed = async () => {
           followersCount,
           followingCount,
         },
-        {
-          where: { id: userId },
-        },
+        { where: { id: userId } },
       );
     }
 
@@ -236,7 +241,6 @@ const seed = async () => {
     process.exit(0);
   } catch (err) {
     console.error("Seeder failed:", err);
-
     process.exit(1);
   }
 };
