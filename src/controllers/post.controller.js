@@ -6,6 +6,7 @@ const { ROLES } = require("../constant/role");
 const { Post, Comment, User, sequelize, PostLike } = require("../models");
 const { getUser, getPost, getSafeUserInclude } = require("../utils/dbHelper");
 const { setCache } = require("../utils/cache");
+const { uploadToCloudinary } = require("../utils/cloudinaryUpload");
 
 // CREATE POST
 exports.createPost = async (req, res, next) => {
@@ -15,10 +16,20 @@ exports.createPost = async (req, res, next) => {
     const { content } = req.body;
     const { user, file } = req;
 
+    let imageUrl = null;
+    let imagePublicId = null;
+
+    if (file) {
+      const uploaded = await uploadToCloudinary(file, "postloop/posts");
+      imageUrl = uploaded.secure_url;
+      imagePublicId = uploaded.public_id;
+    }
+
     const post = await Post.create(
       {
         content,
-        image: file ? file.filename : null,
+        imageUrl,
+        imagePublicId,
         userId: user.id,
         likeCount: 0,
         isDeleted: false,
@@ -26,15 +37,9 @@ exports.createPost = async (req, res, next) => {
       { transaction },
     );
 
-    // safer instance-based increment
     await user.increment("postsCount", { transaction });
 
     await transaction.commit();
-
-    req.activity = {
-      entity: "Post",
-      entityId: post.id,
-    };
 
     return successResponse(res, {
       statusCode: 201,

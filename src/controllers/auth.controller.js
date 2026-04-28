@@ -7,6 +7,8 @@ const { sanitizedUser } = require("../utils/sanitizedUser");
 const ApiError = require("../utils/ApiError");
 const { successResponse } = require("../utils/ApiResponse");
 const { storeToken, deleteToken } = require("../utils/authCache");
+const cloudinary = require("../config/cloudinary");
+const { uploadToCloudinary } = require("../utils/cloudinaryUpload");
 
 // SIGN UP
 exports.signUp = async (req, res, next) => {
@@ -20,12 +22,23 @@ exports.signUp = async (req, res, next) => {
 
     const hashedPassword = await hash(password, 10);
 
+    let profilePictureUrl = null;
+    let profilePicturePublicId = null;
+
+    if (file) {
+      const uploaded = await uploadToCloudinary(file, "postloop/profiles");
+
+      profilePictureUrl = uploaded.secure_url;
+      profilePicturePublicId = uploaded.public_id;
+    }
+
     const user = await User.create({
       name,
       email,
       password: hashedPassword,
       bio: bio || null,
-      profilePicture: file ? file.filename : null,
+      profilePictureUrl,
+      profilePicturePublicId,
       postsCount: 0,
       followersCount: 0,
       followingCount: 0,
@@ -39,7 +52,7 @@ exports.signUp = async (req, res, next) => {
         name: user.name,
         email: user.email,
         bio: user.bio,
-        profilePicture: user.profilePicture,
+        profilePictureUrl: user.profilePictureUrl,
         postsCount: user.postsCount,
         followersCount: user.followersCount,
         followingCount: user.followingCount,

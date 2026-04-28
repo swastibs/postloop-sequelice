@@ -5,10 +5,6 @@ exports.authorize = (...allowedRoles) => {
     try {
       const user = req.user;
 
-      console.log("REQ USER:", req.user);
-      console.log("ROLE:", req.user?.role);
-      console.log("ALLOWED:", allowedRoles);
-
       if (!user)
         throw new ApiError(401, "Authentication required. Please log in.");
 
