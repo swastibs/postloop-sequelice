@@ -20,11 +20,9 @@ const User = sequelize.define(
 
     bio: { type: DataTypes.TEXT, allowNull: true, defaultValue: null },
 
-    profilePicture: {
-      type: DataTypes.STRING,
-      allowNull: true,
-      defaultValue: null,
-    },
+    profilePictureUrl: { type: DataTypes.STRING, allowNull: true },
+
+    profilePicturePublicId: { type: DataTypes.STRING, allowNull: true },
 
     postsCount: { type: DataTypes.INTEGER, defaultValue: 0 },
 

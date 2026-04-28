@@ -6,7 +6,8 @@ const Post = sequelize.define(
   {
     id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
     content: { type: DataTypes.TEXT, allowNull: false },
-    image: { type: DataTypes.STRING, allowNull: true, defaultValue: null },
+    imageUrl: { type: DataTypes.STRING, allowNull: true },
+    imagePublicId: { type: DataTypes.STRING, allowNull: true },
     userId: { type: DataTypes.INTEGER, allowNull: false },
     likeCount: { type: DataTypes.INTEGER, defaultValue: 0 },
     isDeleted: { type: DataTypes.BOOLEAN, defaultValue: false },

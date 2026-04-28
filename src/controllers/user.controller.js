@@ -8,6 +8,8 @@ const { User, Post, Comment, UserFollow, sequelize } = require("../models");
 const { getUser, getSafeUserInclude } = require("../utils/dbHelper");
 const { setCache } = require("../utils/cache");
 const { Op } = require("sequelize");
+const cloudinary = require("../config/cloudinary");
+const { uploadToCloudinary } = require("../utils/cloudinaryUpload");
 
 // GET ALL USERS
 exports.getAllUsers = async (req, res, next) => {
@@ -511,14 +513,22 @@ exports.updateProfile = async (req, res, next) => {
     const file = req.file;
 
     const user = await User.findByPk(userId);
-
     if (!user) throw new ApiError(404, "User not found");
 
-    if (bio !== undefined) user.bio = bio;
+    if (bio !== undefined) user.bio = bio.trim();
 
-    if (file) user.profilePicture = file.filename;
+    let newUpload = null;
+    const oldPublicId = user.profilePicturePublicId;
+
+    if (file) {
+      newUpload = await uploadToCloudinary(file, "postloop/profiles");
+      user.profilePictureUrl = newUpload.secure_url;
+      user.profilePicturePublicId = newUpload.public_id;
+    }
 
     await user.save();
+
+    if (file && oldPublicId) await cloudinary.uploader.destroy(oldPublicId);
 
     return successResponse(res, {
       message: "Profile updated successfully",
@@ -526,11 +536,16 @@ exports.updateProfile = async (req, res, next) => {
         id: user.id,
         name: user.name,
         bio: user.bio,
-        profilePicture: user.profilePicture,
+        profilePictureUrl: user.profilePictureUrl,
         postsCount: user.postsCount,
       },
     });
   } catch (error) {
+    if (req.file && error && error.public_id) {
+      try {
+        await cloudinary.uploader.destroy(error.public_id);
+      } catch (_) {}
+    }
     next(error);
   }
 };
