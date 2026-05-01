@@ -14,11 +14,14 @@ const {
   logInSchema,
 } = require("../../validations/auth.validation");
 const { invalidateCache } = require("../../middlewares/invalidate.middleware");
-const { logOutFrontend } = require("../../middlewares/auth.middleware");
+const {
+  logOutFrontend,
+  isGuest,
+} = require("../../middlewares/auth.middleware");
 
 // GET routes
-router.get("/signup", getSignupPage);
-router.get("/login", getLoginPage);
+router.get("/signup", isGuest, getSignupPage);
+router.get("/login", isGuest, getLoginPage);
 router.get("/logout", logOutFrontend);
 
 router.post(

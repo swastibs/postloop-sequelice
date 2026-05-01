@@ -19,3 +19,10 @@ exports.logOutFrontend = (req, res) => {
     res.redirect("/login");
   });
 };
+
+exports.isGuest = (req, res, next) => {
+  if (req.session.user) {
+    return res.redirect("/feed");
+  }
+  next();
+};
