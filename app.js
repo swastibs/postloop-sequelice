@@ -3,6 +3,9 @@ const express = require("express");
 const passport = require("passport");
 require("dotenv").config();
 const swaggerUi = require("swagger-ui-express");
+const session = require("express-session");
+const flash = require("connect-flash");
+const cookieParser = require("cookie-parser");
 
 require("./src/config/passport");
 const indexRoute = require("./src/routes/index.route");
@@ -26,15 +29,40 @@ app.use(
 );
 
 app.use(express.json());
+
+// EJS setup
+app.set("view engine", "ejs");
+app.set("views", path.join(__dirname, "src/views"));
+
+app.use(express.static(path.join(__dirname, "src/public")));
+
 app.use(express.urlencoded({ extended: true }));
 
-app.use("/uploads", express.static(path.join(__dirname, "src/public/uploads")));
+app.use(cookieParser());
+
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || "secret_key",
+    resave: false,
+    saveUninitialized: false,
+  }),
+);
+
+app.use(flash());
+
+// Make flash messages available in all views
+app.use((req, res, next) => {
+  res.locals.success_msg = req.flash("success_msg");
+  res.locals.error_msg = req.flash("error_msg");
+  res.locals.user = req.session.user || null;
+  next();
+});
 
 app.use(passport.initialize());
 
 app.use(activityLogger);
 
-app.use("/api", indexRoute);
+app.use("/", indexRoute);
 
 app.use((req, res) => {
   res.status(404).json({

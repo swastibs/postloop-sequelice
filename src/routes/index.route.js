@@ -6,10 +6,13 @@ const postRouter = require("./post.route");
 const commentRouter = require("./comment.route");
 const activityRouter = require("./activity.route");
 
-router.use("/auth", authRouter);
-router.use("/users", userRouter);
-router.use("/posts", postRouter);
-router.use("/comments", commentRouter);
-router.use("/activities", activityRouter);
+router.use("/api/auth", authRouter);
+router.use("/api/users", userRouter);
+router.use("/api/posts", postRouter);
+router.use("/api/comments", commentRouter);
+router.use("/api/activities", activityRouter);
+
+router.use("/", require("./frontend/auth.route"));
+
 
 module.exports = router;
