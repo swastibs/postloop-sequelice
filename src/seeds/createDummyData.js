@@ -3,16 +3,28 @@ const bcrypt = require("bcrypt");
 
 const { sequelize, User, Post, Comment, UserFollow } = require("../models");
 
+/* ---------------- PROFILE PICS ---------------- */
+
+const PROFILE_PICS = [
+  "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQKKEDhC14XEw9__RaNyNK2kDNuttrrNT7XtA&s",
+  "https://i.pinimg.com/474x/5e/af/88/5eaf88e37cd1bc501da3dc1a80de417c.jpg",
+  "https://alchetron.com/cdn/chris-evans-actor-069cdfa5-2c3c-445b-a858-63847399897-resize-750.jpeg",
+  "https://w0.peakpx.com/wallpaper/397/83/HD-wallpaper-tv-show-peaky-blinders-cillian-murphy-thomas-shelby.jpg",
+  "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTH72v_d9nyIMo2kO-iXe-0_B7tPpx4y-Umrw&s",
+];
+
+/* ---------------- CONFIG ---------------- */
+
 const CONFIG = {
   USERS: 10,
   POSTS_PER_USER: 10,
   COMMENTS_PER_POST: 10,
-
   MIN_FOLLOWING: 2,
   MAX_FOLLOWING: 5,
-
   BATCH_SIZE: 1000,
 };
+
+/* ---------------- HELPERS ---------------- */
 
 const chunk = (start, size, fn) => {
   const arr = [];
@@ -39,6 +51,8 @@ const sampleBios = [
 const getRandomBio = () =>
   sampleBios[Math.floor(Math.random() * sampleBios.length)];
 
+/* ---------------- SEED ---------------- */
+
 const seed = async () => {
   try {
     await sequelize.authenticate();
@@ -46,7 +60,9 @@ const seed = async () => {
 
     const hashedPassword = await bcrypt.hash("9898", 10);
 
-    /* ---------------- USERS ---------------- */
+    /* ======================================================
+       USERS
+    ====================================================== */
 
     console.log("Starting USERS insertion...");
 
@@ -57,23 +73,25 @@ const seed = async () => {
       const users = chunk(
         i,
         Math.min(CONFIG.BATCH_SIZE, CONFIG.USERS - i),
-        (index) => ({
-          name: `u${index}`,
-          email: `u${index}@gmail.com`,
-          password: hashedPassword,
-          role: "user",
-          bio: getRandomBio(),
-          profilePicture: null,
+        (index) => {
+          const dp = PROFILE_PICS[(index - 1) % PROFILE_PICS.length];
 
-          postsCount: 0,
-          followersCount: 0,
-          followingCount: 0,
-        }),
+          return {
+            name: `u${index}`,
+            email: `u${index}@gmail.com`,
+            password: hashedPassword,
+            role: "user",
+            bio: getRandomBio(),
+            profilePicture: dp,
+
+            postsCount: 0,
+            followersCount: 0,
+            followingCount: 0,
+          };
+        },
       );
 
-      const inserted = await User.bulkCreate(users, {
-        returning: true,
-      });
+      const inserted = await User.bulkCreate(users, { returning: true });
 
       userIds.push(...inserted.map((u) => u.id));
       userInserted += inserted.length;
@@ -83,13 +101,14 @@ const seed = async () => {
 
     console.log(`USERS DONE: ${userInserted}`);
 
-    /* ---------------- POSTS ---------------- */
+    /* ======================================================
+       POSTS
+    ====================================================== */
 
     console.log("Starting POSTS insertion...");
 
     let posts = [];
     let postInserted = 0;
-
     const postCountMap = {};
 
     for (let userId of userIds) {
@@ -117,9 +136,7 @@ const seed = async () => {
 
     console.log(`POSTS DONE: ${postInserted}`);
 
-    /* 🔥 UPDATE POSTS COUNT */
-    console.log("Updating postsCount...");
-
+    /* update posts count */
     for (const userId of Object.keys(postCountMap)) {
       await User.update(
         { postsCount: postCountMap[userId] },
@@ -129,7 +146,9 @@ const seed = async () => {
 
     console.log("POST COUNTS UPDATED");
 
-    /* ---------------- COMMENTS ---------------- */
+    /* ======================================================
+       COMMENTS
+    ====================================================== */
 
     console.log("Starting COMMENTS insertion...");
 
@@ -167,7 +186,9 @@ const seed = async () => {
 
     console.log(`COMMENTS DONE: ${commentInserted}`);
 
-    /* ---------------- FOLLOW SYSTEM ---------------- */
+    /* ======================================================
+       FOLLOW SYSTEM
+    ====================================================== */
 
     console.log("Starting FOLLOW relationships...");
 
@@ -189,15 +210,11 @@ const seed = async () => {
         if (followerId === followingId) continue;
 
         const key = `${followerId}-${followingId}`;
-
         if (followMap.has(key)) continue;
 
         followMap.add(key);
 
-        follows.push({
-          followerId,
-          followingId,
-        });
+        follows.push({ followerId, followingId });
       }
     }
 
@@ -205,9 +222,7 @@ const seed = async () => {
 
     console.log(`FOLLOWS DONE: ${insertedFollows.length}`);
 
-    /* 🔥 UPDATE FOLLOW COUNTS */
-
-    console.log("Updating follower/following counters...");
+    /* update follow counts */
 
     for (const userId of userIds) {
       const followersCount = await UserFollow.count({
@@ -219,15 +234,16 @@ const seed = async () => {
       });
 
       await User.update(
-        {
-          followersCount,
-          followingCount,
-        },
+        { followersCount, followingCount },
         { where: { id: userId } },
       );
     }
 
     console.log("FOLLOW COUNTS UPDATED");
+
+    /* ======================================================
+       DONE
+    ====================================================== */
 
     console.log("SEEDING COMPLETED SUCCESSFULLY");
 

@@ -130,6 +130,9 @@ exports.getFeedPage = async (req, res) => {
     // shuffle final feed (safe)
     enrichedPosts.sort(() => Math.random() - 0.5);
 
+    console.log("enrichedPosts", enrichedPosts);
+    console.log("enrichedSuggestedUsers", enrichedSuggestedUsers);
+
     return res.render("pages/feed", {
       pageTitle: "Feed",
       posts: enrichedPosts,

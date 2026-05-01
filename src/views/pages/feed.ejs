@@ -1,158 +1,156 @@
 <div class="feed-page">
+  <% const hasSuggestedUsers = suggestedUsers && suggestedUsers.length > 0; %>
+  <% const hasPosts = posts && posts.length > 0; %>
 
-  <!-- Suggested Users -->
-  <section class="suggestions mb-4">
-    <h4 class="mb-3">Suggested Users</h4>
+  <% if (!hasSuggestedUsers && !hasPosts) { %>
 
-    <div class="suggestion-list">
-      <% suggestedUsers?.forEach(suggestedUser => { %>
-        <div class="suggestion-card">
-
-          <% if (
-            suggestedUser.profilePictureUrl &&
-            suggestedUser.profilePictureUrl.trim() !== ""
-          ) { %>
-            <img
-              src="<%= suggestedUser.profilePictureUrl %>"
-              alt="<%= suggestedUser.name %>"
-            />
-          <% } else { %>
-            <div class="avatar-fallback">
-              <%= suggestedUser.name.charAt(0).toUpperCase() %>
-            </div>
-          <% } %>
-
-          <span class="fw-semibold mt-2 d-block">
-            <%= suggestedUser.name %>
-          </span>
-
-          <small class="text-white d-block mb-2 truncate-text">
-            <%= suggestedUser.bio || "No bio" %>
-          </small>
-
-          <button
-  class="btn btn-sm mt-2 w-100 follow-btn <%= suggestedUser.isFollowing ? 'btn-danger' : 'btn-primary' %>"
-  data-user-id="<%= suggestedUser.id %>"
->
-  <%= suggestedUser.isFollowing ? 'Unfollow' : 'Follow' %>
-</button>
-        </div>
-      <% }) %>
+    <div class="text-center text-white py-5">
+      <h3>Welcome to PostLoop 👋</h3>
+      <p>No posts or users yet. Start by following people or creating content.</p>
     </div>
-  </section>
 
-  <!-- Feed -->
-  <section>
-    <h4 class="mb-3">Your Feed</h4>
+  <% } else { %>
 
-    <% if (!posts.length) { %>
-      <p class="text-white">No posts yet</p>
-    <% } %>
+    <% if (hasSuggestedUsers) { %>
+      <section class="suggestions mb-4">
+        <h4 class="mb-3">Suggested Users</h4>
 
-    <div class="posts-grid">
-      <% posts.forEach(post => { %>
-        <% const user = post.User; %>
+        <div class="suggestion-list">
+          <% suggestedUsers.forEach(suggestedUser => { %>
+            <div class="suggestion-card">
 
-        <div class="post-card">
-
-          <!-- USER DETAILS -->
-          <div class="post-header">
-            <div class="d-flex align-items-center gap-3">
-
-              <% const hasProfile =
-                user &&
-                user.profilePictureUrl &&
-                user.profilePictureUrl.trim() !== ""; %>
-
-              <% if (hasProfile) { %>
+              <% if (suggestedUser.profilePictureUrl && suggestedUser.profilePictureUrl.trim() !== "") { %>
                 <img
-                  src="<%= user.profilePictureUrl %>"
-                  alt="<%= user.name %>"
-                  class="mini-avatar"
-                  onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                  src="<%= suggestedUser.profilePictureUrl %>"
+                  alt="<%= suggestedUser.name %>"
                 />
-
-                <div
-                  class="mini-avatar avatar-fallback small-avatar"
-                  style="display:none;"
-                >
-                  <%= user?.name?.charAt(0).toUpperCase() || "U" %>
-                </div>
-
               <% } else { %>
-                <div class="mini-avatar avatar-fallback small-avatar">
-                  <%= user?.name?.charAt(0).toUpperCase() || "U" %>
+                <div class="avatar-fallback">
+                  <%= suggestedUser.name.charAt(0).toUpperCase() %>
                 </div>
               <% } %>
 
-              <div class="post-user-info">
-                <div class="fw-bold truncate-text">
-                  <%= user?.name || "Unknown User" %>
-                </div>
+              <span class="fw-semibold mt-2 d-block">
+                <%= suggestedUser.name %>
+              </span>
 
-                <% if (user?.bio && user.bio.trim() !== "") { %>
-                  <small class="text-white truncate-text">
-                    <%= user.bio %>
-                  </small>
-                <% } %>
+              <small class="text-white d-block mb-2 truncate-text">
+                <%= suggestedUser.bio || "No bio" %>
+              </small>
+
+              <button
+                class="btn btn-sm mt-2 w-100 follow-btn <%= suggestedUser.isFollowing ? 'btn-danger' : 'btn-primary' %>"
+                data-user-id="<%= suggestedUser.id %>"
+              >
+                <%= suggestedUser.isFollowing ? 'Unfollow' : 'Follow' %>
+              </button>
+
+            </div>
+          <% }) %>
+        </div>
+      </section>
+    <% } %>
+
+    <!-- ========================= -->
+    <!-- FEED POSTS -->
+    <!-- ========================= -->
+    <% if (hasPosts) { %>
+      <section>
+        <h4 class="mb-3">Your Feed</h4>
+
+        <div class="posts-grid">
+          <% posts.forEach(post => { %>
+
+            <% const user = post.User || {}; %>
+
+            <div class="post-card">
+
+              <!-- USER HEADER -->
+              <div class="post-header">
+                <div class="d-flex align-items-center gap-3">
+
+                  <% const hasProfile = user.profilePictureUrl && user.profilePictureUrl.trim() !== ""; %>
+
+                  <% if (hasProfile) { %>
+                    <img
+                      src="<%= user.profilePictureUrl %>"
+                      class="mini-avatar"
+                      alt="<%= user.name %>"
+                    />
+                  <% } else { %>
+                    <div class="mini-avatar avatar-fallback small-avatar">
+                      <%= user?.name?.charAt(0).toUpperCase() || "U" %>
+                    </div>
+                  <% } %>
+
+                  <div class="post-user-info">
+                    <div class="fw-bold truncate-text">
+                      <%= user?.name || "Unknown User" %>
+                    </div>
+
+                    <% if (user?.bio && user.bio.trim() !== "") { %>
+                      <small class="text-white truncate-text">
+                        <%= user.bio %>
+                      </small>
+                    <% } %>
+                  </div>
+
+                </div>
+              </div>
+
+              <!-- POST IMAGE -->
+              <% if (post.imageUrl && post.imageUrl.trim() !== "") { %>
+                <img
+                  src="<%= post.imageUrl %>"
+                  class="post-image"
+                  alt="Post image"
+                />
+              <% } %>
+
+              <!-- CONTENT -->
+              <div class="p-3">
+                <p class="mb-3"><%= post.content %></p>
+
+                <div class="post-actions">
+
+                  <!-- LIKE -->
+                  <button
+                    type="button"
+                    class="action-btn like-btn"
+                    data-post-id="<%= post.id %>"
+                    data-liked="<%= post.isLiked ? 'true' : 'false' %>"
+                  >
+                    <% if (post.isLiked) { %>
+                      <i class="fa-solid fa-heart" style="color:red"></i>
+                    <% } else { %>
+                      <i class="fa-regular fa-heart"></i>
+                    <% } %>
+
+                    <span class="like-count"><%= post.likeCount || 0 %></span>
+                  </button>
+
+                  <!-- COMMENT -->
+                  <a href="/post/<%= post.id %>" class="action-btn comment-btn">
+                    <i class="fa-regular fa-comment-dots"></i>
+                    <span><%= post.commentCount || 0 %></span>
+                  </a>
+
+                </div>
               </div>
 
             </div>
-          </div>
 
-          <!-- POST IMAGE -->
-          <% if (post.imageUrl && post.imageUrl.trim() !== "") { %>
-            <img
-              src="<%= post.imageUrl %>"
-              class="post-image"
-              alt="Post image"
-              onerror="this.style.display='none'"
-            />
-          <% } %>
-
-          <!-- CONTENT -->
-          <div class="p-3">
-            <p class="mb-3"><%= post.content %></p>
-
-            <div class="post-actions">
-
-              <!-- LIKE BUTTON -->
-              <button
-                type="button"
-                class="action-btn like-btn"
-                data-post-id="<%= post.id %>"
-                data-liked="<%= post.isLiked ? 'true' : 'false' %>"
-              >
-                <% if (post.isLiked) { %>
-                  <i
-                    class="fa-solid fa-heart"
-                    style="color: rgb(255, 0, 0);"
-                  ></i>
-                <% } else { %>
-                  <i class="fa-regular fa-heart"></i>
-                <% } %>
-
-                <span class="like-count"><%= post.likeCount || 0 %></span>
-              </button>
-
-              <!-- COMMENT -->
-              <a href="/post/<%= post.id %>" class="action-btn comment-btn">
-                <i class="fa-regular fa-comment-dots"></i>
-                <span><%= post.commentCount || 0 %></span>
-              </a>
-
-            </div>
-          </div>
-
+          <% }) %>
         </div>
-      <% }) %>
-    </div>
-  </section>
+      </section>
+    <% } %>
+
+  <% } %>
+
 </div>
 
 <script>
   // FOLLOW / UNFOLLOW
-  
   document.querySelectorAll(".follow-btn").forEach((button) => {
     button.addEventListener("click", async function () {
       const userId = this.dataset.userId;
@@ -163,7 +161,6 @@
         });
 
         const data = await response.json();
-        console.log(data);
 
         if (data.isFollowing) {
           this.innerText = "Unfollow";
@@ -179,7 +176,6 @@
       }
     });
   });
-
 
   // LIKE / UNLIKE
   document.querySelectorAll(".like-btn").forEach((button) => {
@@ -198,19 +194,18 @@
         });
 
         const data = await response.json();
-        console.log("like response:", data);
 
         countSpan.innerText = data.likeCount || 0;
 
         if (data.isLiked) {
           icon.className = "fa-solid fa-heart";
-          icon.style.color = "rgb(255, 0, 0)";
+          icon.style.color = "red";
         } else {
           icon.className = "fa-regular fa-heart";
           icon.style.color = "";
         }
       } catch (error) {
-        console.log("like error:", error);
+        console.log(error);
       }
     });
   });
