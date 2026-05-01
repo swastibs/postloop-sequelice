@@ -149,6 +149,11 @@ exports.logIn = async (req, res, next) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        bio: user.bio,
+        profilePictureUrl: user.profilePictureUrl,
+        postsCount: user.postsCount,
+        followersCount: user.followersCount,
+        followingCount: user.followingCount,
       };
 
       req.flash("success_msg", "Login successful");

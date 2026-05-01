@@ -1,0 +1,291 @@
+.app-layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 300px;
+  min-height: 100vh;
+  padding: 30px 20px;
+  background: #0f172a;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  position: sticky;
+  top: 0;
+}
+
+.logo {
+  font-weight: 700;
+  margin-bottom: 30px;
+}
+
+.profile-box {
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 20px;
+}
+
+.profile-img {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.stats {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 20px;
+}
+
+.stats div {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.sidebar-nav {
+  margin-top: 30px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.sidebar-nav a {
+  text-decoration: none;
+  color: white;
+  padding: 12px 14px;
+  border-radius: 12px;
+  transition: 0.3s;
+}
+
+.sidebar-nav a:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.logout-btn {
+  color: #ff6b6b !important;
+}
+
+.main-content {
+  flex: 1;
+  padding: 30px;
+}
+
+.feed-page {
+  max-width: 1200px;
+  margin: auto;
+}
+
+.suggestion-list {
+  display: flex;
+  gap: 15px;
+  overflow-x: auto;
+}
+
+.suggestion-card {
+  min-width: 100px;
+  text-align: center;
+}
+
+.suggestion-card img {
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  object-fit: cover;
+  margin-bottom: 8px;
+}
+
+.posts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 20px;
+}
+
+.post-card {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+.post-image {
+  width: 100%;
+  height: 250px;
+  object-fit: cover;
+}
+
+.mini-avatar {
+  width: 35px;
+  height: 35px;
+  border-radius: 50%;
+}
+
+.avatar-fallback {
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  background: #334155;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 24px;
+  color: white;
+  margin: auto;
+}
+
+.small-avatar {
+  width: 35px;
+  height: 35px;
+  font-size: 14px;
+}
+
+.suggestion-card img,
+.mini-avatar {
+  object-fit: cover;
+}
+
+.feed-page {
+  padding: 10px;
+}
+
+.suggestion-list {
+  display: flex;
+  gap: 18px;
+  overflow-x: auto;
+  padding-bottom: 10px;
+}
+
+.suggestion-card {
+  min-width: 180px;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 18px;
+  border-radius: 18px;
+  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.suggestion-card img,
+.mini-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.avatar-fallback {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6366f1, #3b82f6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: white;
+  margin: auto;
+}
+
+.small-avatar {
+  margin: 0;
+}
+
+.posts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 24px;
+}
+
+.post-card {
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 22px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.post-header {
+  padding: 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.post-image {
+  width: 100%;
+  height: 320px;
+  object-fit: cover;
+}
+
+.post-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.action-btn {
+  flex: 1;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: transparent;
+  color: white;
+  padding: 10px 14px;
+  border-radius: 12px;
+  text-decoration: none;
+  text-align: center;
+  transition: 0.3s;
+}
+
+.action-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: white;
+}
+
+.like-btn.liked {
+  background: #ef4444;
+  border-color: #ef4444;
+  color: white;
+}
+
+.comment-btn {
+  color: #38bdf8;
+}
+
+.comment-btn:hover {
+  color: #38bdf8;
+}
+
+.truncate-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  display: block;
+}
+
+.post-user-info {
+  min-width: 0;
+  flex: 1;
+}
+
+.suggestion-card small {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: block;
+  max-width: 100%;
+}
+
+@media (max-width: 768px) {
+  .posts-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .suggestion-card {
+    min-width: 150px;
+  }
+}
+
+@media (max-width: 992px) {
+  .sidebar {
+    display: none;
+  }
+
+  .main-content {
+    padding: 20px;
+  }
+}

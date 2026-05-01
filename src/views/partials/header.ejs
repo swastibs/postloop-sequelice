@@ -1,0 +1,61 @@
+<aside class="sidebar">
+  <div>
+    <h2 class="logo">PostLoop</h2>
+
+    <div class="profile-box text-center">
+
+      <% if (user.profilePictureUrl && user.profilePictureUrl.trim() !== "") { %>
+        <img
+          src="<%= user.profilePictureUrl %>"
+          class="profile-img"
+          alt="<%= user.name %>"
+          onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+        />
+
+        <div
+          class="profile-fallback"
+          style="display:none;"
+        >
+          <%= user.name.charAt(0).toUpperCase() %>
+        </div>
+
+      <% } else { %>
+        <div class="profile-fallback">
+          <%= user.name.charAt(0).toUpperCase() %>
+        </div>
+      <% } %>
+
+      <h5 class="mt-3 mb-1"><%= user.name %></h5>
+      <p class="text-white small"><%= user.bio || "No bio yet" %></p>
+
+      <div class="stats">
+        <div>
+          <strong><%= user.postsCount || 0 %></strong>
+          <small>Posts</small>
+        </div>
+
+        <div>
+          <strong><%= user.followersCount || 0 %></strong>
+          <small>Followers</small>
+        </div>
+
+        <div>
+          <strong><%= user.followingCount || 0 %></strong>
+          <small>Following</small>
+        </div>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a href="/feed"><i class="fa-regular fa-compass"></i> Feed</a>
+      <a href="/search"><i class="fa-solid fa-magnifying-glass"></i> Search</a>
+      <a href="/search">
+        <i class="fa-regular fa-square-plus fill"></i> Create Post
+      </a>
+      <a href="/settings"><i class="fa-solid fa-gear"></i> Settings</a>
+      <a href="/logout" class="logout-btn">
+        <i class="fa-solid fa-arrow-right-from-bracket"></i> Logout
+      </a>
+    </nav>
+  </div>
+</aside>

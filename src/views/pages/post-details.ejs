@@ -1,0 +1,40 @@
+<div class="container py-4">
+
+  <div class="post-card mb-4">
+
+    <% if(post.imageUrl){ %>
+      <img src="<%= post.imageUrl %>" class="post-image" />
+    <% } %>
+
+    <div class="p-3">
+      <h4><%= post.User.name %></h4>
+      <p><%= post.content %></p>
+
+      <div class="d-flex gap-3">
+        <span>❤️ <%= post.likeCount %></span>
+        <span>💬 <%= comments.length %></span>
+      </div>
+    </div>
+  </div>
+
+  <form action="/post/<%= post.id %>/comment" method="POST" class="mb-4">
+    <textarea
+      name="content"
+      class="form-control"
+      placeholder="Write comment..."
+      required
+    ></textarea>
+
+    <button class="btn btn-primary mt-2">
+      Comment
+    </button>
+  </form>
+
+  <% comments.forEach(comment => { %>
+    <div class="card p-3 mb-2">
+      <strong><%= comment.User.name %></strong>
+      <p class="mb-0"><%= comment.content %></p>
+    </div>
+  <% }) %>
+
+</div>

@@ -1,0 +1,217 @@
+<div class="feed-page">
+
+  <!-- Suggested Users -->
+  <section class="suggestions mb-4">
+    <h4 class="mb-3">Suggested Users</h4>
+
+    <div class="suggestion-list">
+      <% suggestedUsers?.forEach(suggestedUser => { %>
+        <div class="suggestion-card">
+
+          <% if (
+            suggestedUser.profilePictureUrl &&
+            suggestedUser.profilePictureUrl.trim() !== ""
+          ) { %>
+            <img
+              src="<%= suggestedUser.profilePictureUrl %>"
+              alt="<%= suggestedUser.name %>"
+            />
+          <% } else { %>
+            <div class="avatar-fallback">
+              <%= suggestedUser.name.charAt(0).toUpperCase() %>
+            </div>
+          <% } %>
+
+          <span class="fw-semibold mt-2 d-block">
+            <%= suggestedUser.name %>
+          </span>
+
+          <small class="text-white d-block mb-2 truncate-text">
+            <%= suggestedUser.bio || "No bio" %>
+          </small>
+
+          <button
+            class="btn btn-sm btn-primary mt-2 w-100 follow-btn"
+            data-user-id="<%= suggestedUser.id %>"
+          >
+            Follow
+          </button>
+        </div>
+      <% }) %>
+    </div>
+  </section>
+
+  <!-- Feed -->
+  <section>
+    <h4 class="mb-3">Your Feed</h4>
+
+    <% if (!posts.length) { %>
+      <p class="text-white">No posts yet</p>
+    <% } %>
+
+    <div class="posts-grid">
+      <% posts.forEach(post => { %>
+        <% const user = post.User; %>
+
+        <div class="post-card">
+
+          <!-- USER DETAILS -->
+          <div class="post-header">
+            <div class="d-flex align-items-center gap-3">
+
+              <% const hasProfile =
+                user &&
+                user.profilePictureUrl &&
+                user.profilePictureUrl.trim() !== ""; %>
+
+              <% if (hasProfile) { %>
+                <img
+                  src="<%= user.profilePictureUrl %>"
+                  alt="<%= user.name %>"
+                  class="mini-avatar"
+                  onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';"
+                />
+
+                <div
+                  class="mini-avatar avatar-fallback small-avatar"
+                  style="display:none;"
+                >
+                  <%= user?.name?.charAt(0).toUpperCase() || "U" %>
+                </div>
+
+              <% } else { %>
+                <div class="mini-avatar avatar-fallback small-avatar">
+                  <%= user?.name?.charAt(0).toUpperCase() || "U" %>
+                </div>
+              <% } %>
+
+              <div class="post-user-info">
+                <div class="fw-bold truncate-text">
+                  <%= user?.name || "Unknown User" %>
+                </div>
+
+                <% if (user?.bio && user.bio.trim() !== "") { %>
+                  <small class="text-white truncate-text">
+                    <%= user.bio %>
+                  </small>
+                <% } %>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- POST IMAGE -->
+          <% if (post.imageUrl && post.imageUrl.trim() !== "") { %>
+            <img
+              src="<%= post.imageUrl %>"
+              class="post-image"
+              alt="Post image"
+              onerror="this.style.display='none'"
+            />
+          <% } %>
+
+          <!-- CONTENT -->
+          <div class="p-3">
+            <p class="mb-3"><%= post.content %></p>
+
+            <div class="post-actions">
+
+              <!-- LIKE BUTTON -->
+              <button
+                type="button"
+                class="action-btn like-btn"
+                data-post-id="<%= post.id %>"
+                data-liked="<%= post.isLiked ? 'true' : 'false' %>"
+              >
+                <% if (post.isLiked) { %>
+                  <i
+                    class="fa-solid fa-heart"
+                    style="color: rgb(255, 0, 0);"
+                  ></i>
+                <% } else { %>
+                  <i class="fa-regular fa-heart"></i>
+                <% } %>
+
+                <span class="like-count"><%= post.likeCount || 0 %></span>
+              </button>
+
+              <!-- COMMENT -->
+              <a href="/post/<%= post.id %>" class="action-btn comment-btn">
+                <i class="fa-regular fa-comment-dots"></i>
+                <span><%= post.commentCount || 0 %></span>
+              </a>
+
+            </div>
+          </div>
+
+        </div>
+      <% }) %>
+    </div>
+  </section>
+</div>
+
+<script>
+  // FOLLOW / UNFOLLOW
+  
+  document.querySelectorAll(".follow-btn").forEach((button) => {
+    button.addEventListener("click", async function () {
+      const userId = this.dataset.userId;
+
+      try {
+        const response = await fetch(`/user/follow/${userId}`, {
+          method: "POST",
+        });
+
+        const data = await response.json();
+        console.log(data);
+
+        if (data.isFollowing) {
+          this.innerText = "Unfollow";
+          this.classList.remove("btn-primary");
+          this.classList.add("btn-danger");
+        } else {
+          this.innerText = "Follow";
+          this.classList.remove("btn-danger");
+          this.classList.add("btn-primary");
+        }
+      } catch (error) {
+        console.log(error);
+      }
+    });
+  });
+
+
+  // LIKE / UNLIKE
+  document.querySelectorAll(".like-btn").forEach((button) => {
+    button.addEventListener("click", async function () {
+      const postId = this.dataset.postId;
+      const icon = this.querySelector("i");
+      const countSpan = this.querySelector(".like-count");
+
+      try {
+        const response = await fetch(`/post/like/${postId}`, {
+          method: "POST",
+          headers: {
+            "X-Requested-With": "XMLHttpRequest",
+            "Content-Type": "application/json",
+          },
+        });
+
+        const data = await response.json();
+        console.log("like response:", data);
+
+        countSpan.innerText = data.likeCount || 0;
+
+        if (data.isLiked) {
+          icon.className = "fa-solid fa-heart";
+          icon.style.color = "rgb(255, 0, 0)";
+        } else {
+          icon.className = "fa-regular fa-heart";
+          icon.style.color = "";
+        }
+      } catch (error) {
+        console.log("like error:", error);
+      }
+    });
+  });
+</script>
