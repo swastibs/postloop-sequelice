@@ -148,6 +148,7 @@ exports.logIn = async (req, res, next) => {
         id: user.id,
         name: user.name,
         email: user.email,
+        role: user.role,
       };
 
       req.flash("success_msg", "Login successful");
