@@ -1,5 +1,5 @@
 const { Op } = require("sequelize");
-const { Post, User, UserFollow } = require("../../models");
+const { Post, User, UserFollow, PostLike } = require("../../models");
 
 exports.getHomePage = (req, res) => {
   res.render("pages/home", {
@@ -9,7 +9,13 @@ exports.getHomePage = (req, res) => {
 
 exports.getFeedPage = async (req, res) => {
   try {
-    const currentUserId = req.session.user.id;
+    const currentUserId = req.session.user?.id;
+
+    if (!currentUserId) {
+      req.flash("error_msg", "Please login first");
+      return req.session.save(() => res.redirect("/login"));
+    }
+
     const limit = 9;
 
     const userInclude = {
@@ -17,26 +23,24 @@ exports.getFeedPage = async (req, res) => {
       attributes: ["id", "name", "profilePictureUrl", "bio"],
     };
 
-    // following users
-    const following = await UserFollow.findAll({
+    // ---------------- FOLLOWING IDS ----------------
+    const followingRows = await UserFollow.findAll({
       where: { followerId: currentUserId },
       attributes: ["followingId"],
       raw: true,
     });
 
-    const followingIds = following.map((f) => f.followingId);
+    const followingIds = followingRows.map((f) => f.followingId);
 
-    // suggested users
+    const excludeIds = [...followingIds, currentUserId];
+
+    // ---------------- SUGGESTED USERS ----------------
     const suggestedUsers = await User.findAll({
       where: {
-        id: {
-          [Op.notIn]: [...followingIds, currentUserId],
-        },
+        id: { [Op.notIn]: excludeIds.length ? excludeIds : [0] },
         isDeleted: false,
         isActive: true,
-        role: {
-          [Op.ne]: "admin",
-        },
+        role: { [Op.ne]: "admin" },
       },
       attributes: [
         "id",
@@ -51,60 +55,88 @@ exports.getFeedPage = async (req, res) => {
       order: User.sequelize.random(),
     });
 
-    let posts = [];
+    // attach follow state (fast in-memory)
+    const followingSet = new Set(followingIds);
 
-    if (followingIds.length > 0) {
-      // 70% following posts
-      const followingPosts = await Post.findAll({
-        where: {
-          isDeleted: false,
-          userId: {
-            [Op.in]: followingIds,
-          },
-        },
-        include: [userInclude],
-        order: [["createdAt", "DESC"]],
-        limit: 7,
-      });
+    const enrichedSuggestedUsers = suggestedUsers.map((user) => {
+      const u = user.toJSON();
+      u.isFollowing = followingSet.has(u.id);
+      return u;
+    });
 
-      // 30% random posts
-      const randomPosts = await Post.findAll({
-        where: {
-          isDeleted: false,
-          userId: {
-            [Op.notIn]: [...followingIds, currentUserId],
+    // ---------------- POSTS ----------------
+    const basePostWhere = {
+      isDeleted: false,
+    };
+
+    let posts;
+
+    if (followingIds.length) {
+      const [followingPosts, randomPosts] = await Promise.all([
+        Post.findAll({
+          where: {
+            ...basePostWhere,
+            userId: { [Op.in]: followingIds },
           },
-        },
-        include: [userInclude],
-        order: Post.sequelize.random(),
-        limit: 3,
-      });
+          include: [userInclude],
+          order: [["createdAt", "DESC"]],
+          limit: 7,
+        }),
+
+        Post.findAll({
+          where: {
+            ...basePostWhere,
+            userId: { [Op.notIn]: excludeIds },
+          },
+          include: [userInclude],
+          order: User.sequelize.random(),
+          limit: 3,
+        }),
+      ]);
 
       posts = [...followingPosts, ...randomPosts];
     } else {
       posts = await Post.findAll({
         where: {
-          isDeleted: false,
-          userId: {
-            [Op.ne]: currentUserId,
-          },
+          ...basePostWhere,
+          userId: { [Op.ne]: currentUserId },
         },
         include: [userInclude],
-        order: Post.sequelize.random(),
+        order: User.sequelize.random(),
         limit,
       });
     }
 
-    // shuffle for fresh feed every refresh
-    posts = posts.sort(() => Math.random() - 0.5);
+    // ---------------- LIKE STATUS (OPTIMIZED SET) ----------------
+    const postIds = posts.map((p) => p.id);
+
+    const likedRows = await PostLike.findAll({
+      where: {
+        userId: currentUserId,
+        postId: postIds.length ? { [Op.in]: postIds } : [0],
+      },
+      attributes: ["postId"],
+      raw: true,
+    });
+
+    const likedSet = new Set(likedRows.map((l) => l.postId));
+
+    const enrichedPosts = posts.map((post) => {
+      const p = post.toJSON();
+      p.isLiked = likedSet.has(p.id);
+      return p;
+    });
+
+    // shuffle final feed (safe)
+    enrichedPosts.sort(() => Math.random() - 0.5);
 
     return res.render("pages/feed", {
       pageTitle: "Feed",
-      posts,
-      suggestedUsers,
+      posts: enrichedPosts,
+      suggestedUsers: enrichedSuggestedUsers,
     });
   } catch (error) {
-    console.log(error);
+    console.error(error);
 
     req.flash("error_msg", "Failed to load feed");
 

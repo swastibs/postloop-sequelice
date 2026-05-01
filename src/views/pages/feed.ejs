@@ -31,11 +31,11 @@
           </small>
 
           <button
-            class="btn btn-sm btn-primary mt-2 w-100 follow-btn"
-            data-user-id="<%= suggestedUser.id %>"
-          >
-            Follow
-          </button>
+  class="btn btn-sm mt-2 w-100 follow-btn <%= suggestedUser.isFollowing ? 'btn-danger' : 'btn-primary' %>"
+  data-user-id="<%= suggestedUser.id %>"
+>
+  <%= suggestedUser.isFollowing ? 'Unfollow' : 'Follow' %>
+</button>
         </div>
       <% }) %>
     </div>
