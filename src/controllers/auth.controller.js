@@ -13,12 +13,25 @@ const { uploadToCloudinary } = require("../utils/cloudinaryUpload");
 // SIGN UP
 exports.signUp = async (req, res, next) => {
   try {
+    const isFrontend =
+      req.headers["content-type"]?.includes(
+        "application/x-www-form-urlencoded",
+      ) || req.headers["content-type"]?.includes("multipart/form-data");
+
     const { name, email, password, bio } = req.body;
     const file = req.file;
 
     const existingUser = await User.findOne({ where: { email } });
 
-    if (existingUser) throw new ApiError(409, "Email already exists");
+    if (existingUser) {
+      if (isFrontend) {
+        req.flash("error_msg", "Email already exists");
+        return req.session.save(() => {
+          res.redirect("/signup");
+        });
+      }
+      throw new ApiError(409, "Email already exists");
+    }
 
     const hashedPassword = await hash(password, 10);
 
@@ -27,7 +40,6 @@ exports.signUp = async (req, res, next) => {
 
     if (file) {
       const uploaded = await uploadToCloudinary(file, "postloop/profiles");
-
       profilePictureUrl = uploaded.secure_url;
       profilePicturePublicId = uploaded.public_id;
     }
@@ -44,6 +56,14 @@ exports.signUp = async (req, res, next) => {
       followingCount: 0,
     });
 
+    if (isFrontend) {
+      req.flash("success_msg", "Signup successful! Please login.");
+
+      return req.session.save(() => {
+        res.redirect("/login");
+      });
+    }
+
     return successResponse(res, {
       statusCode: 201,
       message: "User created successfully",
@@ -53,12 +73,20 @@ exports.signUp = async (req, res, next) => {
         email: user.email,
         bio: user.bio,
         profilePictureUrl: user.profilePictureUrl,
-        postsCount: user.postsCount,
-        followersCount: user.followersCount,
-        followingCount: user.followingCount,
       },
     });
   } catch (error) {
+    const isFrontend = req.headers["content-type"]?.includes(
+      "application/x-www-form-urlencoded",
+    );
+
+    if (isFrontend) {
+      req.flash("error_msg", error.message || "Something went wrong");
+      return req.session.save(() => {
+        res.redirect("/signup");
+      });
+    }
+
     next(error);
   }
 };
@@ -66,18 +94,46 @@ exports.signUp = async (req, res, next) => {
 // LOGIN
 exports.logIn = async (req, res, next) => {
   try {
+    const isFrontend =
+      req.headers["content-type"]?.includes(
+        "application/x-www-form-urlencoded",
+      ) || req.headers["content-type"]?.includes("multipart/form-data");
+
     const { email, password } = req.body;
 
     const user = await User.findOne({
       where: { email, isDeleted: false },
     });
 
-    if (!user) throw new ApiError(404, "User not exist");
-    if (!user.isActive) throw new ApiError(403, "User is inactive");
+    // USER CHECK
+    if (!user) {
+      if (isFrontend) {
+        req.flash("error_msg", "User not exist");
+        return req.session.save(() => res.redirect("/login"));
+      }
+      throw new ApiError(404, "User not exist");
+    }
 
+    // ACTIVE CHECK
+    if (!user.isActive) {
+      if (isFrontend) {
+        req.flash("error_msg", "User is inactive");
+        return req.session.save(() => res.redirect("/login"));
+      }
+      throw new ApiError(403, "User is inactive");
+    }
+
+    // ✅ DEFINE HERE (IMPORTANT)
     const isPasswordMatch = await compare(password, user.password);
 
-    if (!isPasswordMatch) throw new ApiError(401, "Invalid credentials");
+    // PASSWORD CHECK
+    if (!isPasswordMatch) {
+      if (isFrontend) {
+        req.flash("error_msg", "Invalid credentials");
+        return req.session.save(() => res.redirect("/login"));
+      }
+      throw new ApiError(401, "Invalid credentials");
+    }
 
     const jwtToken = jwt.sign(
       { userId: user.id, email: user.email, role: user.role },
@@ -87,6 +143,20 @@ exports.logIn = async (req, res, next) => {
 
     await storeToken(jwtToken);
 
+    if (isFrontend) {
+      req.session.user = {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+      };
+
+      req.flash("success_msg", "Login successful");
+
+      return req.session.save(() => {
+        res.redirect("/feed");
+      });
+    }
+
     return successResponse(res, {
       message: "Login Success",
       data: {
@@ -94,6 +164,15 @@ exports.logIn = async (req, res, next) => {
       },
     });
   } catch (error) {
+    const isFrontend = req.headers["content-type"]?.includes(
+      "application/x-www-form-urlencoded",
+    );
+
+    if (isFrontend) {
+      req.flash("error_msg", error.message || "Login failed");
+      return req.session.save(() => res.redirect("/login"));
+    }
+
     next(error);
   }
 };
